@@ -1,0 +1,17 @@
+# DOSKA 1 = sender (TSN master). Riadi rychlost svojho motora a posiela uhol.
+[network]
+bind_ip = "111.222.0.10"     # adresa na rozhrani ep.20 po "source /usr/bin/net_setup.sh -b1"
+peer_ip = "111.222.0.20"
+port = 5005
+# so_priority = -1           # master mapuje prioritu 0 -> PCP 4, nechaj nenastavene
+
+[motor]
+backend = "foc_lib"          # pouziva motorovu kniznicu AMD
+[motor.foc_lib]
+module = "py_foc_motor_ctrl"  # py_foc_motor_ctrl (alebo prazdne "" pre autodetekciu)
+
+[sender]
+rate_hz = 200
+initial_rpm = 0
+max_rpm = 1000               # bezpecnostny limit, zvysuj postupne
+log_path = ""

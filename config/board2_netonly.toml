@@ -1,0 +1,13 @@
+# DOSKA 2, test siete: receiver so SIMULOVANYM motorom (nic sa nehybe), zapisuje log
+# s vekom paketov a oneskorenim. Vhodne na prve TSN testy bez zapojeneho motora.
+[network]
+bind_ip = "111.222.0.20"
+peer_ip = "111.222.0.10"
+port = 5005
+
+[motor]
+backend = "sim"
+
+[receiver]
+rate_hz = 200
+log_path = "receiver_log.csv"

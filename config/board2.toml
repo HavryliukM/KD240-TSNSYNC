@@ -1,0 +1,28 @@
+# DOSKA 2 = receiver (TSN slave). Sleduje uhol z dosky 1 vlastnym motorom.
+[network]
+bind_ip = "111.222.0.20"     # adresa na rozhrani ep.20 po "source /usr/bin/net_setup.sh -b2"
+peer_ip = "111.222.0.10"
+port = 5005
+
+[motor]
+backend = "foc_lib"          # pouziva motorovu kniznicu AMD
+[motor.foc_lib]
+module = "py_foc_motor_ctrl"  # py_foc_motor_ctrl (alebo prazdne "" pre autodetekciu)
+
+[receiver]
+rate_hz = 200
+timeout_ms = 50
+direction = 1                # ak sa motor 2 tociv opacnom smere, daj -1 (najprv s malym momentom!)
+ratio = 1.0
+max_error_deg = 60
+mode = "torque_pd"
+log_path = "receiver_log.csv"
+
+[receiver.torque_pd]
+# Startovacie hodnoty zo SIMULACIE, nie z realneho motora. Treba odladit.
+kp_a_per_deg = 0.011
+kd_a_per_dps = 0.00045
+ki_a_per_deg_s = 0.0
+i_limit_a = 0.05
+torque_limit_a = 0.1         # prve pokusy len 0.1 A, motor volne otacatelny
+slew_a_s = 20

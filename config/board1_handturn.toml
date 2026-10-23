@@ -1,0 +1,12 @@
+# DOSKA 1, test prenosu bez riadenia motora: poloha z enkodera (IIO sysfs), motor otacas rukou.
+# Najprv over tools/check_encoder.py, ze sa hodnota meni.
+[network]
+bind_ip = "111.222.0.10"
+peer_ip = "111.222.0.20"
+port = 5005
+
+[motor]
+backend = "iio_readonly"
+
+[sender]
+rate_hz = 200

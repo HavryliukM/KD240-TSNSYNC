@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KD240 TSN Sync — Riadiaci a monitorovací dashboard</title>
+  <meta name="description" content="Riadenie a real-time monitorovanie synchronizácie motorov cez TSN na AMD Kria KD240">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Header -->
+    <header class="top-header">
+      <div class="logo-group">
+        <div class="logo-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </div>
+        <div>
+          <h1>KD240 TSN SYNC</h1>
+          <span class="subtitle">Distribuované riadenie motorov cez TSN • AMD Kria KD240</span>
+        </div>
+      </div>
+      
+      <div class="header-badges">
+        <div class="badge mode-badge" id="badge-mode">REŽIM: DEMO</div>
+        <div class="badge status-badge" id="badge-status">
+          <span class="status-dot"></span>
+          <span id="status-text">INITIALIZING</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Alert / Fault Banner -->
+    <div class="alert-banner" id="fault-banner" style="display: none;">
+      <span class="alert-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path>
+          <line x1="12" y1="9" x2="12" y2="13"></line>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+      </span>
+      <span id="fault-text">Chyba riadenia</span>
+      <button class="btn btn-sm btn-clear" id="btn-banner-clear">Vymazať poruchu</button>
+    </div>
+
+    <!-- Main Grid Layout -->
+    <main class="dashboard-grid">
+      
+      <!-- Card: Motor 1 (Master) -->
+      <section class="card motor-card" id="card-motor1">
+        <div class="card-header">
+          <span class="node-tag master-tag">DOSKA 1 • MASTER</span>
+          <h2>Motor 1 (Sender)</h2>
+        </div>
+        <div class="metric-row">
+          <div class="metric-block">
+            <span class="metric-label">ŽIADANÁ RÝCHLOSŤ</span>
+            <div class="metric-value highlight-cyan"><span id="m1-rpm-set">0</span> <small>RPM</small></div>
+          </div>
+          <div class="metric-block">
+            <span class="metric-label">SKUTOČNÉ OTÁČKY</span>
+            <div class="metric-value"><span id="m1-speed">0.0</span> <small>RPM</small></div>
+          </div>
+        </div>
+        <div class="metric-row secondary">
+          <div class="metric-block">
+            <span class="metric-label">UHOL HRIADEĽA (0° - 360°)</span>
+            <div class="metric-value deg-val highlight-cyan"><span id="m1-theta">0.0</span>°</div>
+            <div class="turn-subtext"><span id="m1-turns">0.0</span> ot. (kumul. <span id="m1-theta-total">0</span>°)</div>
+          </div>
+          <div class="metric-block">
+            <span class="metric-label">RIADENIE</span>
+            <div class="status-indicator-mini" id="m1-ctrl-mode">Rýchlostné (FOC)</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Card: Synchronizácia & Odchýlka -->
+      <section class="card sync-card" id="card-sync">
+        <div class="card-header">
+          <span class="node-tag sync-tag">TSN KOORDINÁCIA</span>
+          <h2>Regulačná odchýlka</h2>
+        </div>
+        
+        <div class="error-display">
+          <div class="error-value" id="sync-error">0.00°</div>
+          <div class="error-subtext">Chyba sledovania polohy (Motor 1 vs Motor 2)</div>
+        </div>
+
+        <!-- Bi-directional Center-zero Meter -->
+        <div class="deviation-meter-wrapper">
+          <div class="meter-track-container">
+            <div class="meter-track">
+              <!-- Tolerance band (+/- 2 deg around 0) -->
+              <div class="meter-tolerance-zone" title="Tolerančné pásmo ±2.0°"></div>
+              <!-- Center Zero Reference Tick -->
+              <div class="meter-center-tick"></div>
+              <!-- Dynamic Fill Bar expanding from center -->
+              <div class="meter-fill-bar" id="meter-fill-bar"></div>
+              <!-- Needle Pointer -->
+              <div class="meter-needle" id="meter-needle" style="left: 50%;">
+                <div class="needle-head"></div>
+              </div>
+            </div>
+          </div>
+          <div class="meter-scale">
+            <span>-15°</span>
+            <span>-10°</span>
+            <span>-5°</span>
+            <span class="scale-zero">0°</span>
+            <span>+5°</span>
+            <span>+10°</span>
+            <span>+15°</span>
+          </div>
+          <div class="meter-badge-row">
+            <span class="meter-badge" id="meter-badge">SYNCHRONIZOVANÉ (±2.0°)</span>
+          </div>
+        </div>
+
+        <div class="sync-stats-mini">
+          <div>Pakety: <strong id="sync-seq">0</strong></div>
+          <div>Prenos: <strong id="sync-lat">0.0</strong> ms (<span id="sync-lat-us">0</span> µs)</div>
+          <div>Jitter: <strong id="sync-jitter">±0.0</strong> µs</div>
+        </div>
+      </section>
+
+      <!-- Card: Motor 2 (Slave) -->
+      <section class="card motor-card" id="card-motor2">
+        <div class="card-header">
+          <span class="node-tag slave-tag">DOSKA 2 • SLAVE</span>
+          <h2>Motor 2 (Receiver)</h2>
+        </div>
+        <div class="metric-row">
+          <div class="metric-block">
+            <span class="metric-label">REGULAČNÝ PRÚD</span>
+            <div class="metric-value highlight-emerald"><span id="m2-torque">0.000</span> <small>A</small></div>
+          </div>
+          <div class="metric-block">
+            <span class="metric-label">SKUTOČNÉ OTÁČKY</span>
+            <div class="metric-value"><span id="m2-speed">0.0</span> <small>RPM</small></div>
+          </div>
+        </div>
+        <div class="metric-row secondary">
+          <div class="metric-block">
+            <span class="metric-label">SLEDOVANÝ UHOL (0° - 360°)</span>
+            <div class="metric-value deg-val highlight-emerald"><span id="m2-theta">0.0</span>°</div>
+            <div class="turn-subtext"><span id="m2-turns">0.0</span> ot. (kumul. <span id="m2-theta-total">0</span>°)</div>
+          </div>
+          <div class="metric-block">
+            <span class="metric-label">REGULÁTOR</span>
+            <div class="status-indicator-mini">Polohový TorquePD (200 Hz)</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Chart Panel -->
+      <section class="card chart-card full-width">
+        <div class="card-header chart-header">
+          <div>
+            <h2>Živý priebeh synchronizácie (uhol & odchýlka)</h2>
+            <span class="card-desc">Sledovanie natočenia oboch motorov [0° - 360°] a regulačnej odchýlky v reálnom čase</span>
+          </div>
+          <div class="chart-legend">
+            <button type="button" class="legend-toggle active" id="toggle-m1" title="Kliknutím skryť/zobraziť krivku">
+              <span class="dot legend-m1"></span> Motor 1 (Master): <strong id="legend-m1-val">0.0°</strong>
+            </button>
+            <button type="button" class="legend-toggle active" id="toggle-m2" title="Kliknutím skryť/zobraziť krivku">
+              <span class="dot legend-m2"></span> Motor 2 (Slave): <strong id="legend-m2-val">0.0°</strong>
+            </button>
+            <button type="button" class="legend-toggle active" id="toggle-err" title="Kliknutím skryť/zobraziť krivku">
+              <span class="dot legend-err"></span> Odchýlka: <strong id="legend-err-val">0.00°</strong>
+            </button>
+          </div>
+        </div>
+        <div class="chart-container" id="chart-container">
+          <canvas id="liveChart"></canvas>
+        </div>
+      </section>
+
+      <!-- Telemetry & Timing Log Panel -->
+      <section class="card telemetry-card full-width">
+        <div class="card-header telemetry-header">
+          <div>
+            <div class="header-with-tag">
+              <span class="node-tag sync-tag">IEEE 802.1Qbv • 200 Hz</span>
+              <h2>TSN Komunikačná telemetria & Časový záznam paketov</h2>
+            </div>
+            <span class="card-desc">Detailné meranie času odoslania (Tx) a prečítania (Rx) paketov cez sieť v reálnom čase</span>
+          </div>
+          <div class="telemetry-actions">
+            <button class="btn btn-sm btn-secondary" id="btn-toggle-log">
+              <span id="log-toggle-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="6" y="4" width="4" height="16"></rect>
+                  <rect x="14" y="4" width="4" height="16"></rect>
+                </svg>
+              </span>
+              <span id="log-toggle-text">Pozastaviť log</span>
+            </button>
+            <a href="/api/export_csv" class="btn btn-sm btn-primary" id="btn-export-csv" download="tsn_timing_log.csv">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              <span>Stiahnuť CSV log</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Timing KPI Row -->
+        <div class="timing-kpi-row">
+          <div class="kpi-mini-card">
+            <span class="kpi-label">DOBA PRENOSU (TX → RX)</span>
+            <div class="kpi-val"><span id="tele-lat-us">0.0</span> <small>µs</small></div>
+            <span class="kpi-sub"><span id="tele-lat-ms">0.000</span> ms</span>
+          </div>
+          <div class="kpi-mini-card">
+            <span class="kpi-label">VARIÁCIA ONESKORENIA (JITTER)</span>
+            <div class="kpi-val highlight-amber"><span id="tele-jitter-us">±0.0</span> <small>µs</small></div>
+            <span class="kpi-sub">Rozptyl za posl. 100 paketov</span>
+          </div>
+          <div class="kpi-mini-card">
+            <span class="kpi-label">FREKVENCIA SLUČKY</span>
+            <div class="kpi-val highlight-emerald">200.0 <small>Hz</small></div>
+            <span class="kpi-sub">Periódový čas: 5.00 ms</span>
+          </div>
+          <div class="kpi-mini-card">
+            <span class="kpi-label">TSN PRIORITA & QOS</span>
+            <div class="kpi-val highlight-cyan">PCP 4</div>
+            <span class="kpi-sub">VLAN 20 • Plánovač IEEE 802.1Qbv</span>
+          </div>
+        </div>
+
+        <!-- Packet Timing Live Table -->
+        <div class="table-container">
+          <table class="telemetry-table">
+            <thead>
+              <tr>
+                <th># SEQ</th>
+                <th>Čas odoslania (Tx)</th>
+                <th>Čas prijatia (Rx)</th>
+                <th>Doba prenosu (Tx → Rx)</th>
+                <th>Uhol M1 (Master)</th>
+                <th>Uhol M2 (Slave)</th>
+                <th>Odchýlka</th>
+                <th>Otáčky (RPM)</th>
+                <th>Stav</th>
+              </tr>
+            </thead>
+            <tbody id="packet-log-tbody">
+              <tr>
+                <td colspan="9" class="table-empty">Čakám na prvé pakety...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Control Panel -->
+      <section class="card control-card full-width">
+        <div class="card-header">
+          <h2>Ovládacie centrum</h2>
+          <span class="card-desc">Priame nastavenie otáčok, predvoľby a bezpečnostné funkcie</span>
+        </div>
+
+        <div class="control-grid">
+          <!-- Slider & Input -->
+          <div class="control-box">
+            <label for="speed-slider">Žiadané otáčky pre Motor 1:</label>
+            <div class="slider-group">
+              <input type="range" id="speed-slider" min="-2000" max="2000" step="50" value="0">
+              <div class="input-with-unit">
+                <input type="number" id="speed-input" value="0" min="-2000" max="2000" step="50">
+                <span>RPM</span>
+              </div>
+              <button class="btn btn-primary" id="btn-apply-speed">Nastaviť</button>
+            </div>
+            
+            <!-- Quick Presets -->
+            <div class="preset-buttons">
+              <button class="btn btn-preset" data-rpm="-500">-500 RPM</button>
+              <button class="btn btn-preset" data-rpm="-300">-300 RPM</button>
+              <button class="btn btn-preset" data-rpm="0">0 RPM</button>
+              <button class="btn btn-preset" data-rpm="300">+300 RPM</button>
+              <button class="btn btn-preset" data-rpm="500">+500 RPM</button>
+              <button class="btn btn-preset" data-rpm="1000">+1000 RPM</button>
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="control-actions">
+            <button class="btn btn-danger btn-lg" id="btn-estop">
+              <span class="btn-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <rect x="9" y="9" width="6" height="6"></rect>
+                </svg>
+              </span>
+              <span>ZASTAVIŤ POHONY (OFF)</span>
+            </button>
+            <button class="btn btn-secondary" id="btn-clear-fault">
+              <span class="btn-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                  <path d="M3 3v5h5"></path>
+                </svg>
+              </span>
+              <span>Vymazať poruchy (Fault Reset)</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Real-time Controller Tuning Panel -->
+      <section class="card tuning-card full-width" id="card-tuning">
+        <div class="card-header tuning-header">
+          <div>
+            <div class="header-with-tag">
+              <span class="node-tag sync-tag">TSN CLOSED-LOOP</span>
+              <h2>Ladenie polohového regulátora v reálnom čase (Real-time Tuning)</h2>
+            </div>
+            <span class="card-desc">Interaktívne doladenie zosilnenia Kp, tlmenia Kd, integrácie Ki a dynamiky bez nutnosti reštartu servera</span>
+          </div>
+          <div class="tuning-status-wrap">
+            <span class="status-indicator-mini" id="tuning-status-badge">Aktívny model: Simulácia (200 Hz)</span>
+          </div>
+        </div>
+
+        <div class="tuning-grid">
+          <!-- Kp -->
+          <div class="tuning-item">
+            <div class="tuning-label-row">
+              <label for="tune-kp">Kp – Polohové zosilnenie</label>
+              <span class="tuning-hint">Moment [A] na 1° chyby</span>
+            </div>
+            <div class="tuning-input-row">
+              <input type="range" id="tune-kp-slider" min="0.005" max="0.300" step="0.001" value="0.080">
+              <div class="input-with-unit mini">
+                <input type="number" id="tune-kp" value="0.080" min="0.001" max="1.0" step="0.001">
+                <span>A/°</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Kd -->
+          <div class="tuning-item">
+            <div class="tuning-label-row">
+              <label for="tune-kd">Kd – Derivačné tlmenie</label>
+              <span class="tuning-hint">Tlmenie rýchlostnej odchýlky</span>
+            </div>
+            <div class="tuning-input-row">
+              <input type="range" id="tune-kd-slider" min="0.0001" max="0.0100" step="0.0001" value="0.0020">
+              <div class="input-with-unit mini">
+                <input type="number" id="tune-kd" value="0.0020" min="0.0000" max="0.1000" step="0.0001">
+                <span>A/(°/s)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Ki -->
+          <div class="tuning-item">
+            <div class="tuning-label-row">
+              <label for="tune-ki">Ki – Integračná zložka</label>
+              <span class="tuning-hint">Eliminácia statickej odchýlky</span>
+            </div>
+            <div class="tuning-input-row">
+              <input type="range" id="tune-ki-slider" min="0.0000" max="0.0200" step="0.0005" value="0.0020">
+              <div class="input-with-unit mini">
+                <input type="number" id="tune-ki" value="0.0020" min="0.0000" max="0.1000" step="0.0005">
+                <span>A/(°·s)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Torque limit -->
+          <div class="tuning-item">
+            <div class="tuning-label-row">
+              <label for="tune-limit">Imax – Max. momentový prúd</label>
+              <span class="tuning-hint">Prúdový strop regulátora</span>
+            </div>
+            <div class="tuning-input-row">
+              <input type="range" id="tune-limit-slider" min="0.1" max="3.0" step="0.1" value="1.5">
+              <div class="input-with-unit mini">
+                <input type="number" id="tune-limit" value="1.5" min="0.05" max="2.5" step="0.05">
+                <span>A</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Slew rate -->
+          <div class="tuning-item">
+            <div class="tuning-label-row">
+              <label for="tune-slew">Slew Rate – Strmosť nábehu</label>
+              <span class="tuning-hint">Max zmena prúdu za sekundu</span>
+            </div>
+            <div class="tuning-input-row">
+              <input type="range" id="tune-slew-slider" min="10" max="1500" step="10" value="500">
+              <div class="input-with-unit mini">
+                <input type="number" id="tune-slew" value="500" min="5" max="5000" step="10">
+                <span>A/s</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Max Error -->
+          <div class="tuning-item">
+            <div class="tuning-label-row">
+              <label for="tune-maxerr">emax – Limit poruchy (FAULT)</label>
+              <span class="tuning-hint">Bezpečnostné vypnutie pohonu</span>
+            </div>
+            <div class="tuning-input-row">
+              <input type="range" id="tune-maxerr-slider" min="10" max="180" step="5" value="60">
+              <div class="input-with-unit mini">
+                <input type="number" id="tune-maxerr" value="60" min="5" max="360" step="1">
+                <span>°</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Presets & Actions Row -->
+        <div class="tuning-footer">
+          <div class="tuning-presets">
+            <span class="presets-label">Predvoľby:</span>
+            <button class="btn btn-preset" id="preset-sim-tune">Simulácia (Dynamická)</button>
+            <button class="btn btn-preset" id="preset-hw-tune">KD240 Hardware (Bezpečný štart)</button>
+            <button class="btn btn-preset" id="preset-strict-tune">Vysoká presnosť TSN</button>
+          </div>
+          <div class="tuning-actions">
+            <button class="btn btn-secondary" id="btn-reset-tuning">Obnoviť predvolené</button>
+            <button class="btn btn-primary" id="btn-apply-tuning">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                <polyline points="7 3 7 8 15 8"></polyline>
+              </svg>
+              <span>Aplikovať do regulátora</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <span>Projekt diplomovej práce: Synchronizácia motorov cez TSN • AMD Kria KD240</span>
+      <span>IEEE 802.1Qbv • IEEE 802.1AS PTP • 200 Hz UDP Slučka</span>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

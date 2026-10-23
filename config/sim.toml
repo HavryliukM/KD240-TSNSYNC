@@ -1,0 +1,8 @@
+# Simulacia na jednom pocitaci (bez dosky): python3 -m kd240sync demo
+[network]
+bind_ip = "127.0.0.1"
+peer_ip = "127.0.0.1"
+port = 5005
+
+[motor]
+backend = "sim"
