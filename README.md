@@ -293,20 +293,11 @@ scripts/check_env.sh                              # 3. kontrola
 
 ### Varianta A: Cez GitHub
 
-Na notebooku:
-```bash
-cd kd240-tsn-sync
-git init && git add . && git commit -m "Prva verzia"
-git branch -M main
-git remote add origin https://github.com/<pouzivatel>/kd240-tsn-sync.git
-git push -u origin main
-```
-
 Na každej doske:
 ```bash
 sudo apt install -y git
-git clone https://github.com/<pouzivatel>/kd240-tsn-sync.git
-cd kd240-tsn-sync
+git clone https://github.com/HavryliukM/KD240-TSNSYNC.git
+cd KD240-TSNSYNC
 ```
 
 Aktualizácia: `git pull`
@@ -416,50 +407,7 @@ Na rozdiel od AMD Bokeh dashboardu (ktorý slúži len na manuálne nastavovanie
 Po spustení otvor v prehliadači:  
 Adresa: **`http://localhost:8080`** (na PC) alebo **`http://<IP_DOSKY>:8080`** (na doske / cez Tailscale).
 
-### Testovacia stránka na Windows PC (demo bez dosky)
-
-Demo simuluje oba motory a sieť na jednom počítači, nepotrebuje hardvér ani žiadne balíčky (Python 3.11+).
-
-**Spustenie** (PowerShell v priečinku projektu):
-
-```powershell
-cd C:\Projects\DP\kd240-tsn-sync
-python -m web.server --mode demo --port 8089
-```
-
-Potom otvor v prehliadači **http://localhost:8089** (bez `--port` je predvolený port 8080).
-V demo režime server počúva len na `127.0.0.1`, takže je dostupný iba z tohto počítača.
-
-Server môžeš nechať bežať na pozadí (okno terminálu sa nezaplní logom):
-
-```powershell
-Start-Process python -ArgumentList "-m","web.server","--mode","demo","--port","8089" -WindowStyle Hidden
-```
-
-**Zastavenie:**
-
-- Ak beží v termináli: stlač `Ctrl+C`.
-- Ak beží na pozadí, nájdi proces podľa portu a ukonči ho:
-
-```powershell
-# zistí PID procesu, ktorý počúva na porte 8089
-$procId = (Get-NetTCPConnection -LocalPort 8089 -State Listen).OwningProcess
-Stop-Process -Id $procId
-```
-
-**Overenie, či beží:**
-
-```powershell
-Get-NetTCPConnection -LocalPort 8089 -State Listen    # prázdny výstup = nebeží
-curl.exe http://localhost:8089/api/status             # vráti JSON so stavom
-```
-
-Aktuálne (stav k 23. 10. 2026) beží demo na porte **8089**.
-
-Pred zastavením cez dashboard klikni na **E-Stop**; v demo režime sa tým zastavia oba simulované motory.
-
-> Dashboard nemá prihlásenie. Na doske (`--mode sender|receiver|single`) počúva predvolene na `0.0.0.0`, takže ovládanie motora je dostupné komukoľvek v sieti. Používaj ho len v dôveryhodnej sieti (Tailscale / TSN) alebo pridaj `--host 127.0.0.1` a pripájaj sa cez SSH tunel.
-> Server odmieta POST požiadavky s cudzím `Origin` a kontroluje rozsahy (`rpm` do `sender.max_rpm`, prúd do 2,5 A, hranice parametrov regulátora).
+> Dashboard nemá prihlásenie. Na doske (`--mode sender|receiver|single`) počúva predvolene na `0.0.0.0`, takže ovládanie motora je dostupné komukoľvek v sieti. Používaj ho len v dôveryhodnej sieti (Tailscale / TSN), alebo pridaj `--host 127.0.0.1` a pripájaj sa cez SSH tunel. Demo režim počúva len na `127.0.0.1`.
 
 ---
 

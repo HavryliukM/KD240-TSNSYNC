@@ -5,3 +5,4 @@ __pycache__/
 .venv/
 reference/**/.git/
 reference/
+LOCAL_NOTES.md
