@@ -1,5 +1,8 @@
 // KD240 TSN Sync — Frontend Logic & Real-time Charting
 
+// Hodnoty blizke nule sa zobrazia ako 0 (bez "-0.0" a bez poskakovania sumu)
+const cleanNum = (v, eps) => (Math.abs(v) < eps ? 0 : v);
+
 document.addEventListener('DOMContentLoaded', () => {
   // DOM Elements
   const badgeMode = document.getElementById('badge-mode');
@@ -182,7 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function applyTuningPreset(kp, kd, ki, limit, slew, maxErr) {
     if (tuneKpSlider) { tuneKpSlider.value = kp; tuneKpInput.value = kp.toFixed(3); }
-    if (tuneKdSlider) { tuneKdSlider.value = kd; tuneKdInput.value = kd.toFixed(4); }
+    if (tuneKdSlider) { tuneKdSlider.value = kd; tuneKdInput.value = kd.toFixed(5); }
     if (tuneKiSlider) { tuneKiSlider.value = ki; tuneKiInput.value = ki.toFixed(4); }
     if (tuneLimitSlider) { tuneLimitSlider.value = limit; tuneLimitInput.value = limit.toFixed(2); }
     if (tuneSlewSlider) { tuneSlewSlider.value = slew; tuneSlewInput.value = slew.toFixed(0); }
@@ -192,16 +195,16 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if (presetSimTune) {
-    presetSimTune.addEventListener('click', () => applyTuningPreset(0.080, 0.0020, 0.0020, 1.5, 500, 60));
+    presetSimTune.addEventListener('click', () => applyTuningPreset(0.022, 0.00045, 0.0004, 1.5, 500, 60));
   }
   if (presetHwTune) {
     presetHwTune.addEventListener('click', () => applyTuningPreset(0.011, 0.00045, 0.0000, 0.1, 20, 60));
   }
   if (presetStrictTune) {
-    presetStrictTune.addEventListener('click', () => applyTuningPreset(0.120, 0.0030, 0.0050, 2.0, 800, 30));
+    presetStrictTune.addEventListener('click', () => applyTuningPreset(0.026, 0.00045, 0.0005, 2.0, 800, 30));
   }
   if (btnResetTuning) {
-    btnResetTuning.addEventListener('click', () => applyTuningPreset(0.080, 0.0020, 0.0020, 1.5, 500, 60));
+    btnResetTuning.addEventListener('click', () => applyTuningPreset(0.022, 0.00045, 0.0004, 1.5, 500, 60));
   }
 
   async function sendTuning() {
@@ -211,9 +214,9 @@ document.addEventListener('DOMContentLoaded', () => {
       return Number.isFinite(v) ? v : fallback;
     };
     const payload = {
-      kp: num(tuneKpInput, 0.08),
-      kd: num(tuneKdInput, 0.002),
-      ki: num(tuneKiInput, 0.0),
+      kp: num(tuneKpInput, 0.022),
+      kd: num(tuneKdInput, 0.00045),
+      ki: num(tuneKiInput, 0.0004),
       torque_limit_a: num(tuneLimitInput, 1.5),
       slew_a_s: num(tuneSlewInput, 500.0),
       max_error_deg: num(tuneMaxerrInput, 60.0),
@@ -305,7 +308,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Motor 1 metrics — zobraz normalizovany uhol (0-360°) nie kumulativny
     m1RpmSet.textContent = Math.round(data.motor1.rpm_set);
-    m1Speed.textContent = data.motor1.speed_rpm.toFixed(1);
+    m1Speed.textContent = cleanNum(data.motor1.speed_rpm, 0.5).toFixed(1);
     const m1Mod = data.motor1.theta_mod != null ? data.motor1.theta_mod : (((data.motor1.theta_deg % 360) + 360) % 360);
     m1Theta.textContent = m1Mod.toFixed(1);
     if (m1Turns) m1Turns.textContent = (data.motor1.turns != null ? data.motor1.turns.toFixed(1) : '0.0');
@@ -313,14 +316,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Motor 2 metrics — zobraz normalizovany uhol (0-360°)
     m2Torque.textContent = (data.motor2.output_a || 0).toFixed(3);
-    m2Speed.textContent = data.motor2.speed_rpm.toFixed(1);
+    m2Speed.textContent = cleanNum(data.motor2.speed_rpm, 0.5).toFixed(1);
     const m2Mod = data.motor2.theta_mod != null ? data.motor2.theta_mod : (((data.motor2.theta_deg % 360) + 360) % 360);
     m2Theta.textContent = m2Mod.toFixed(1);
     if (m2Turns) m2Turns.textContent = (data.motor2.turns != null ? data.motor2.turns.toFixed(1) : '0.0');
     if (m2ThetaTotal) m2ThetaTotal.textContent = Math.round(Math.abs(data.motor2.theta_deg || 0));
 
     // Sync metrics & Center-zero meter
-    const err = data.sync.error_deg || 0;
+    const err = cleanNum(data.sync.error_deg || 0, 0.05);
     const absErr = Math.abs(err);
     // Clamp display value to ±15° range for the meter; show real value in numeric
     const displayErr = Math.max(-15, Math.min(15, err));
@@ -386,7 +389,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       if (tuneKdSlider && document.activeElement !== tuneKdInput && document.activeElement !== tuneKdSlider) {
         tuneKdSlider.value = t.kd;
-        tuneKdInput.value = (t.kd != null ? t.kd.toFixed(4) : '0.0020');
+        tuneKdInput.value = (t.kd != null ? t.kd.toFixed(5) : '0.0020');
       }
       if (tuneKiSlider && document.activeElement !== tuneKiInput && document.activeElement !== tuneKiSlider) {
         tuneKiSlider.value = t.ki;
@@ -405,7 +408,8 @@ document.addEventListener('DOMContentLoaded', () => {
         tuneMaxerrInput.value = (t.max_error_deg != null ? t.max_error_deg.toFixed(0) : '60');
       }
       if (tuningStatusBadge) {
-        tuningStatusBadge.textContent = `Aktívne: Kp=${t.kp} | Kd=${t.kd} | Limit=${t.torque_limit_a}A | emax=${t.max_error_deg}°`;
+        const warn = (data.tuning_warn && data.tuning_warn.length) ? ` | UPRAVENE POISTKOU: ${data.tuning_warn.join('; ')}` : '';
+        tuningStatusBadge.textContent = `Aktívne: Kp=${Number(t.kp).toFixed(4)} | Kd=${Number(t.kd).toFixed(5)} | Limit=${t.torque_limit_a}A | emax=${t.max_error_deg}°${warn}`;
       }
       tuningInitialized = true;
     }

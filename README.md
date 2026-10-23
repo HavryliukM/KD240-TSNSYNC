@@ -601,6 +601,7 @@ backend = "sim"              # sim | foc_lib | iio_readonly
 [sender]
 rate_hz = 200
 max_rpm = 1000               # bezpečnostný limit
+ramp_rpm_s = 500                # max. zrychlenie ziadanej rychlosti [rpm/s], 0 = bez rampy (skok nezhodi sledovanie)
 
 [receiver]
 rate_hz = 200
@@ -616,6 +617,19 @@ kd_a_per_dps = 0.00045       # derivačný člen
 ki_a_per_deg_s = 0.0         # integrálny člen
 torque_limit_a = 0.1         # limit momentu [A]
 slew_a_s = 20                # limit rýchlosti zmeny momentu
+
+[safety]                     # dohľad a overenie stability, predvolené hodnoty v kd240sync/config.py
+ka_rad_s2_per_a = 2500       # Ka sústavy [rad/s^2 na A]; na reálnom motore odmerať
+spike_deg = 45               # skoková zmena chyby za cyklus → FAULT
+sat_s = 0.6                  # výstup nasýtený dlhšie → FAULT
+max_torque_a = 2.0           # tvrdý strop limitu momentu
+
+[sim_net]                    # model TSN linky len pre demo v dashboarde
+delay_us = 150
+jitter_us = 25
+spike_prob = 0.002
+spike_us = 1500
+loss = 0.0
 ```
 
 ---
@@ -653,7 +667,7 @@ V dashboarde: Mode Torque, 0.3 A, sleduj sklon rýchlosti:
 Ka = alfa / I     [rad/s² na 1 A]
 ```
 
-V simulácii: `Ka ≈ 2500`.
+V simulácii: `Ka ≈ 2500`. Nameranú hodnotu zapíš do `[safety] ka_rad_s2_per_a`, overenie stability zosilnení sa podľa nej prepočíta.
 
 ### 2. Výpočet zosilnení
 
@@ -723,6 +737,9 @@ python3 tools/udp_load.py 111.222.0.20 --mbit 300 --seconds 60 --priority 1
 - Prvé pokusy s **malým momentom** (`torque_limit_a = 0.1`) a malým limitom chyby (`max_error_deg = 60`)
 - Skontroluj smer s malým momentom. **Zlý smer pri spätnej väzbe spôsobí rozbeh namiesto tlmenia!**
 - Softvérové poistky: limit momentu, watchdog, STOP, limit chyby polohy → všetky vedú k `motor.stop()`
+- **Dohľad nad regulátorom** (`kd240sync/safety.py`, sekcia `[safety]`): v každom cykle kontroluje nečíselné hodnoty, chybu polohy, skokovú zmenu chyby (`spike_deg`), dlho nasýtený výstup (`sat_s`), kmitanie, prekročenie rýchlosti (`overspeed_factor` × `sender.max_rpm`) a výpadok slučky (`overrun_factor`). Pri akejkoľvek anomálii zastaví motor a prejde do FAULT.
+- **Zosilnenia sa overujú pred použitím.** Kp, Kd a Ki (z TOML aj z dashboardu) prejdú testom stability na modeli sústavy (dvojitý integrátor so ziskom `Ka`, oneskorenie 1 vzorka, prúdová slučka) pre `Ka` v rozsahu 0,5 až 2 násobok nominálnej hodnoty. Nestabilné hodnoty sa automaticky znížia a dashboard zobrazí upozornenie. Limit momentu, slew a limit chyby majú tvrdé stropy (`max_torque_a`, `max_slew_a_s`, `max_error_cap_deg`).
+- Záruka platí pre model. **`safety.ka_rad_s2_per_a` treba odmerať na reálnom motore** (sekcia Ladenie regulátora), do vtedy je to odhad zo simulácie.
 - Pri `SIGKILL` alebo páde sa softvérové poistky neuplatnia → **spoliehaj na fyzické odpojenie 24 V**
 - **Nepoužívaj režim Open Loop** (priame Vd/Vq) — motor sa môže nekontrolovane rozbehnúť
 

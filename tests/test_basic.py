@@ -79,3 +79,16 @@ class ControllerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_ramp_limiter_limits_acceleration():
+    from kd240sync.controller import RampLimiter
+    r = RampLimiter(500.0)
+    r.set_target(700.0)
+    assert r.update(0.1) == 50.0            # 500 rpm/s * 0.1 s
+    for _ in range(20):
+        r.update(0.1)
+    assert r.value == 700.0                 # nepresiahne cielovu hodnotu
+    r.jump(0.0)
+    assert r.value == r.target == 0.0
+    assert RampLimiter(0.0).update(0.1) == 0.0

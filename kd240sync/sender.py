@@ -7,6 +7,7 @@ import time
 
 from . import protocol
 from .angle import Unwrapper
+from .controller import RampLimiter
 from .timing import PeriodicLoop
 
 
@@ -39,6 +40,7 @@ def run(cfg, motor, sock, stop_event, commands=None, quiet=False) -> dict:
     unw = Unwrapper()
     log = []
     rpm_set = 0.0
+    ramp = RampLimiter(sc.ramp_rpm_s)
     seq = 0
     t0 = time.monotonic()
     last_print = t0
@@ -46,13 +48,17 @@ def run(cfg, motor, sock, stop_event, commands=None, quiet=False) -> dict:
     try:
         initial = float(sc.initial_rpm)
         if initial:
-            rpm_set = _apply_rpm(motor, initial, sc, quiet)
+            rpm_set = _clamp_rpm(initial, sc, quiet)
+            ramp.set_target(rpm_set)
         while not stop_event.is_set():
             loop.wait()
             while commands is not None and not commands.empty():
                 kind, val = commands.get()
                 if kind == "rpm":
-                    rpm_set = _apply_rpm(motor, val, sc, quiet)
+                    rpm_set = _clamp_rpm(val, sc, quiet)
+                    ramp.set_target(rpm_set)
+            if ramp.value != ramp.target:
+                motor.set_speed_rpm(ramp.update(period))
             ms = motor.read()
             theta = unw.update(ms.theta_deg)
             pkt = protocol.Packet(seq, time.time_ns(), theta, ms.speed_rpm,
@@ -89,7 +95,7 @@ def run(cfg, motor, sock, stop_event, commands=None, quiet=False) -> dict:
     return stats
 
 
-def _apply_rpm(motor, rpm, sc, quiet):
+def _clamp_rpm(rpm, sc, quiet):
     limit = float(sc.max_rpm)
     if abs(rpm) > limit:
         rpm = limit if rpm > 0 else -limit
@@ -97,5 +103,4 @@ def _apply_rpm(motor, rpm, sc, quiet):
             print(f"[sender] rychlost obmedzena na {rpm:.0f} rpm (sender.max_rpm)")
     if 0 < abs(rpm) < float(sc.min_rpm_warn) and not quiet:
         print(f"[sender] pozor: pod {sc.min_rpm_warn:.0f} rpm sa motor nemusi rozbehnut")
-    motor.set_speed_rpm(rpm)
     return rpm

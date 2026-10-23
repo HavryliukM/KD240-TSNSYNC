@@ -7,6 +7,7 @@ import time
 
 from . import protocol
 from .angle import Unwrapper
+from . import safety
 from .controller import SpeedP, TorquePD
 from .timing import PeriodicLoop
 
@@ -66,11 +67,19 @@ class RxThread(threading.Thread):
             return self.latest, self.last_lat_ms
 
 
-def make_controller(rc):
+def make_controller(rc, sc=None):
+    """sc = cfg.safety: ak je zadane, zosilnenia sa obmedzia na stabilny rozsah."""
     if rc.mode == "torque_pd":
         t = rc.torque_pd
-        return TorquePD(t.kp_a_per_deg, t.kd_a_per_dps, t.ki_a_per_deg_s,
-                        t.torque_limit_a, t.slew_a_s, t.i_limit_a)
+        kp, kd, ki = t.kp_a_per_deg, t.kd_a_per_dps, t.ki_a_per_deg_s
+        limit, slew = t.torque_limit_a, t.slew_a_s
+        if sc is not None:
+            v, warns = safety.clamp_gains(kp, kd, ki, limit, slew, rc.max_error_deg,
+                                          1.0 / float(rc.rate_hz), sc)
+            kp, kd, ki, limit, slew = v["kp"], v["kd"], v["ki"], v["torque_limit_a"], v["slew_a_s"]
+            for w in warns:
+                print(f"[safety] {w}", flush=True)
+        return TorquePD(kp, kd, ki, limit, slew, t.i_limit_a, t.deadband_deg)
     if rc.mode == "speed_p":
         s = rc.speed_p
         return SpeedP(s.kp_rpm_per_deg, s.max_rpm)
@@ -85,7 +94,9 @@ def run(cfg, motor, sock, stop_event, quiet=False) -> dict:
     sign = 1.0 if int(rc.direction) >= 0 else -1.0
     ratio = float(rc.ratio)
     max_err = float(rc.max_error_deg)
-    ctrl = make_controller(rc)
+    ctrl = make_controller(rc, cfg.safety)
+    sup = safety.Supervisor(cfg.safety, period, max_err,
+                            float(cfg.sender.max_rpm) * float(cfg.safety.overspeed_factor))
     torque_mode = rc.mode == "torque_pd"
     unw = Unwrapper()
     loop = PeriodicLoop(period, float(rc.spin_us) / 1e6)
@@ -129,24 +140,28 @@ def run(cfg, motor, sock, stop_event, quiet=False) -> dict:
             if state == WAIT:
                 off_remote, off_local = remote, local                # zarovnanie bez skoku
                 ctrl.reset()
+                sup.reset()
                 state = RUN
                 if not quiet:
                     print("[receiver] RUN (zarovnane)", flush=True)
             ref = off_local + sign * ratio * (remote - off_remote)
             w_ref = sign * ratio * pkt.omega_rpm * 6.0
             err = ref - local
-            if abs(err) > max_err:
+            if torque_mode:
+                out = ctrl.update(err, w_ref - ms.speed_rpm * 6.0, dt)
+            else:
+                out = ctrl.update(err, w_ref, dt)
+            reason = sup.check(now / 1e9, err, out, getattr(ctrl, "limit", 0.0), ms.speed_rpm)
+            if reason:
                 motor.stop()
                 state = FAULT
-                fault_reason = f"chyba polohy {err:.1f} deg > {max_err:.1f}"
+                fault_reason = reason
                 if not quiet:
                     print(f"[receiver] FAULT: {fault_reason}", flush=True)
                 continue
             if torque_mode:
-                out = ctrl.update(err, w_ref - ms.speed_rpm * 6.0, dt)
                 motor.set_torque_a(out)
             else:
-                out = ctrl.update(err, w_ref, dt)
                 motor.set_speed_rpm(out)
             err_sq += err * err
             err_n += 1

@@ -29,6 +29,7 @@ import logging
 import math
 import os
 import queue
+import random
 import socket
 import sys
 import threading
@@ -39,7 +40,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from kd240sync import angle, config, controller, motor as motor_mod, net, protocol, receiver, timing
+from kd240sync import angle, config, controller, motor as motor_mod, net, protocol, receiver, safety, timing
 
 MAX_TORQUE_A = 2.5
 TUNE_LIMITS = {
@@ -52,6 +53,9 @@ TUNE_LIMITS = {
 }
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 log = logging.getLogger("web_server")
+
+
+RampLimiter = controller.RampLimiter
 
 
 def _finite(value, name):
@@ -80,12 +84,17 @@ class SystemManager:
         base_cfg = config.load(cfg_path)
         self.max_rpm = float(base_cfg.sender.max_rpm)
         self.max_torque_a = float(base_cfg.receiver.torque_pd.torque_limit_a)
+        self.dt = 1.0 / float(base_cfg.receiver.rate_hz)
+        self.safety_cfg = base_cfg.safety
+        self.speed_p = base_cfg.receiver.mode == "speed_p"
 
         # Telemetria casovania paketov (Tx -> Rx)
         self.recent_packets = collections.deque(maxlen=25)
         self.latencies_us = collections.deque(maxlen=100)
         self.csv_history = collections.deque(maxlen=2000)
         self._last_logged_seq = -1
+        self.jitter_us = 0.0
+        self._prev_lat_us = None
 
         # Telemetricky stav
         self.status = {
@@ -121,14 +130,15 @@ class SystemManager:
             },
             "recent_packets": [],
             "tuning": {
-                "kp": 0.08,
-                "kd": 0.002,
-                "ki": 0.002,
+                "kp": 0.022,
+                "kd": 0.00045,
+                "ki": 0.0004,
                 "torque_limit_a": 1.5,
                 "slew_a_s": 500.0,
                 "max_error_deg": 60.0,
             },
             "fault": "",
+            "tuning_warn": [],
             "ts": time.time(),
         }
 
@@ -228,25 +238,46 @@ class SystemManager:
         port = rsock.getsockname()[1]
         cfg["network"]["port"] = port
         ssock = net.make_sender_socket(cfg)
-        m1 = motor_mod.SimMotor(**cfg.motor.sim)
-        m2 = motor_mod.SimMotor(**cfg.motor.sim)
+        # Virtualny cas: kazdy cyklus posunie simulaciu presne o dt, takze vypadky planovaca
+        # hostitelskeho PC (Windows) nevyrobia v demu falosnu regulacnu chybu.
+        vnow = [0]
+        vclock = lambda: vnow[0]
+        m1 = motor_mod.SimMotor(**cfg.motor.sim, clock=vclock)
+        m2 = motor_mod.SimMotor(**cfg.motor.sim, clock=vclock)
         m1.open()
         m2.open()
 
         unw1 = angle.Unwrapper()
         unw2 = angle.Unwrapper()
-        ctrl = receiver.make_controller(cfg.receiver)
         rate_hz = float(cfg.sender.rate_hz)
         dt = 1.0 / rate_hz
+        ctrl = receiver.make_controller(cfg.receiver, cfg.safety)
         loop = timing.PeriodicLoop(dt)
+        timeout_ns = int(float(cfg.receiver.timeout_ms) * 1e6)
+
+        # Model TSN linky pre demo (hodnoty z [sim_net] v konfiguracii)
+        sn = cfg.sim_net
+        rng = random.Random(1)
+        net_delay_us, net_jitter_us = float(sn.delay_us), float(sn.jitter_us)
+        net_spike_p, net_spike_us = float(sn.spike_prob), float(sn.spike_us)
+        net_loss = float(sn.loss)
+        pending = []
+        last_pkt = None
+        last_seq = -1
+        lost = net_lost = 0
+        new_pkt = False
+        lat_us = lat_ms = 0.0
+        last_err = 0.0
 
         rpm_set = 0.0
+        ramp = RampLimiter(cfg.sender.ramp_rpm_s)
         seq = 0
         state = "RUN"
         off_remote = off_local = 0.0
         is_synced = False
         max_err = float(cfg.receiver.max_error_deg)
-
+        sup = safety.Supervisor(cfg.safety, dt, max_err,
+                                float(cfg.sender.max_rpm) * float(cfg.safety.overspeed_factor))
 
         with self.lock:
             self.status["state"] = "RUN"
@@ -262,25 +293,32 @@ class SystemManager:
         try:
             while not self.stop_event.is_set():
                 loop.wait()
+                vnow[0] += int(dt * 1e9)
                 while not self.commands.empty():
                     k, v = self.commands.get()
                     if k == "rpm":
                         rpm_set = float(v)
                         if state != "FAULT":
-                            m1.set_speed_rpm(rpm_set)
+                            ramp.set_target(rpm_set)
                     elif k == "stop":
                         rpm_set = 0.0
+                        ramp.jump(0.0)
                         m1.stop()
                         m2.stop()
                         ctrl.reset()
                         is_synced = False
+                        last_err = 0.0
                     elif k == "clear_fault":
                         # Zastavime oba motory na 0, vycistime socket buffer a resetujeme zarovnanie
                         rpm_set = 0.0
+                        ramp.jump(0.0)
                         m1.stop()
                         m2.stop()
                         ctrl.reset()
                         is_synced = False
+                        last_pkt = None
+                        pending = []
+                        last_err = 0.0
                         while True:
                             try:
                                 rsock.recvfrom(2048)
@@ -293,94 +331,109 @@ class SystemManager:
                             self.status["motor1"]["rpm_set"] = 0.0
                             self.status["sync"]["error_deg"] = 0.0
                     elif k == "tune":
-                        max_err = self._apply_tuning(ctrl, v, max_err)
+                        max_err = self._apply_tuning(ctrl, v, max_err, dt, cfg.safety)
+                        sup.max_err = max_err
                         with self.lock:
                             self.status["tuning"] = self._tuning_snapshot(ctrl, max_err)
 
-                # 1. Krok Sender (Motor 1)
+                # 1. Krok Sender (Motor 1): ziadana rychlost sa meni len rampou
+                if state != "FAULT" and ramp.value != ramp.target:
+                    m1.set_speed_rpm(ramp.update(dt))
                 st1 = m1.read()
                 th1 = unw1.update(st1.theta_deg)
-                t_tx_ns = time.time_ns()
-                pkt = protocol.Packet(seq, t_tx_ns, th1, st1.speed_rpm, protocol.FLAG_VALID)
+                pkt = protocol.Packet(seq, time.time_ns(), th1, st1.speed_rpm, protocol.FLAG_VALID)
                 ssock.sendto(protocol.pack(pkt), ("127.0.0.1", port))
                 seq += 1
 
-                # 2. Krok Receiver (Motor 2): precitame vsetky cakajuce pakety a pouzijeme NAJNOVSI
-                rx_pkt = None
-                t_rx_ns = time.time_ns()
+                # 2. Simulovana TSN siet: paket sa dorucí po case delay +- jitter, ojedinele
+                #    s dodatocnym oneskorenim (spike) alebo sa straci. Localhost je len transport.
                 while True:
                     try:
                         data, _ = rsock.recvfrom(2048)
-                        t_rx_ns = time.time_ns()
-                        rx_pkt = protocol.unpack(data)
+                        p = protocol.unpack(data)
                     except (BlockingIOError, socket.timeout):
                         break
-                    except Exception:
+                    except protocol.ProtocolError:
+                        continue
+                    except OSError:
                         break
+                    if rng.random() < net_loss:
+                        net_lost += 1
+                        continue
+                    delay_us = max(0.0, rng.gauss(net_delay_us, net_jitter_us))
+                    if rng.random() < net_spike_p:
+                        delay_us += net_spike_us
+                    pending.append((vnow[0] + int(delay_us * 1e3), delay_us, p))
+                now = vnow[0]
+                due = [x for x in pending if x[0] <= now]
+                if due:
+                    pending = [x for x in pending if x[0] > now]
+                    due.sort(key=lambda x: x[2].seq)
+                    for t_due, d_us, p in due:
+                        if p.seq > last_seq:
+                            if last_seq >= 0 and p.seq > last_seq + 1:
+                                lost += p.seq - last_seq - 1
+                            last_seq = p.seq
+                            last_pkt = (p, t_due, d_us)
+                            new_pkt = True
 
+                # 3. Krok Receiver (Motor 2)
                 st2 = m2.read()
                 local = unw2.update(st2.theta_deg)
-                err = 0.0
                 out = 0.0
-                lat_us = 0.0
-                lat_ms = 0.0
 
-                if rx_pkt:
-                    remote = rx_pkt.theta_deg
-                    if not is_synced:
-                        off_remote, off_local = remote, local
-                        ctrl.reset()
-                        is_synced = True
-
-                    # Latencia paketu (Tx -> Rx)
-                    lat_ns = max(0, t_rx_ns - rx_pkt.t_tx_ns)
-                    lat_us = lat_ns / 1000.0
-                    lat_ms = lat_ns / 1_000_000.0
-                    self.latencies_us.append(lat_us)
-
-                    # TSN extrapolacia cieloveho uhla o vek paketu (kompenzacia sietoveho oneskorenia)
-                    lat_s = lat_ns / 1e9
-                    comp_remote = remote + rx_pkt.omega_rpm * 6.0 * lat_s
-                    ref = off_local + (comp_remote - off_remote)
-                    err = ref - local
-
-                    tx_dt = datetime.datetime.fromtimestamp(rx_pkt.t_tx_ns / 1e9)
-                    rx_dt = datetime.datetime.fromtimestamp(t_rx_ns / 1e9)
-                    th1_mod = ((th1 % 360.0) + 360.0) % 360.0
-                    loc_mod = ((local % 360.0) + 360.0) % 360.0
-                    pkt_entry = {
-                        "seq": rx_pkt.seq,
-                        "tx_time": tx_dt.strftime("%H:%M:%S.%f")[:-3],
-                        "rx_time": rx_dt.strftime("%H:%M:%S.%f")[:-3],
-                        "lat_us": round(lat_us, 1),
-                        "lat_ms": round(lat_ms, 3),
-                        "theta_m1": round(th1_mod, 1),
-                        "theta_m2": round(loc_mod, 1),
-                        "err_deg": round(err, 2),
-                        "speed_rpm": round(st1.speed_rpm, 1),
-                        "status": "OK" if abs(err) <= max_err else "WARN",
-                    }
-                    self.recent_packets.append(pkt_entry)
-                    self.csv_history.append(pkt_entry)
-
-                    if state != "FAULT" and abs(err) > max_err:
-                        # FAULT: zastavime OBA motory okamzite
-                        m1.stop()
-                        m2.stop()
-                        rpm_set = 0.0
-                        state = "FAULT"
-                        with self.lock:
-                            self.status["fault"] = f"Chyba sledovania {err:+.1f}° prekrocila limit {max_err:.0f}°!"
-                            self.status["state"] = "FAULT"
-                            self.status["motor1"]["rpm_set"] = 0.0
-                    elif state != "FAULT":
+                if state != "FAULT" and last_pkt is not None:
+                    rx_pkt, t_rx_mono, delay_us = last_pkt
+                    age_s = max(0, now - t_rx_mono) / 1e9
+                    if age_s * 1e9 > timeout_ns:
+                        # pakety neprichadzaju -> motor 2 uvolnit, po obnoveni sa znova zarovna
+                        if is_synced:
+                            m2.stop()
+                            ctrl.reset()
+                            is_synced = False
+                        err = 0.0
+                    else:
+                        remote = rx_pkt.theta_deg + rx_pkt.omega_rpm * 6.0 * age_s
+                        if not is_synced:
+                            off_remote, off_local = remote, local
+                            ctrl.reset()
+                            sup.reset()
+                            is_synced = True
+                        ref = off_local + (remote - off_remote)
+                        err = ref - local
                         w_ff = rx_pkt.omega_rpm * 6.0
-                        w_local = st2.speed_rpm * 6.0
-                        out = ctrl.update(err, w_ff - w_local, dt)
-                        m2.set_torque_a(out)
+                        out = ctrl.update(err, w_ff - st2.speed_rpm * 6.0, dt)
+                        reason = sup.check(now / 1e9, err, out, ctrl.limit, st2.speed_rpm)
+                        if new_pkt:
+                            lat_us = delay_us
+                            lat_ms = lat_us / 1000.0
+                            self.latencies_us.append(lat_us)
+                            self._note_jitter(lat_us)
+                            entry = self._packet_entry(rx_pkt, time.time_ns(), lat_us, lat_ms,
+                                                       th1, local, err, st1.speed_rpm, max_err)
+                            self.recent_packets.append(entry)
+                            self.csv_history.append(entry)
+                        if reason:
+                            # FAULT: zastavime OBA motory okamzite
+                            m1.stop()
+                            m2.stop()
+                            rpm_set = 0.0
+                            ramp.jump(0.0)
+                            out = 0.0
+                            state = "FAULT"
+                            with self.lock:
+                                self.status["fault"] = f"Poistka: {reason}"
+                                self.status["state"] = "FAULT"
+                                self.status["motor1"]["rpm_set"] = 0.0
+                        else:
+                            m2.set_torque_a(out)
+                        last_err = err
+                else:
+                    err = 0.0 if state == "FAULT" else last_err
+                new_pkt = False
 
                 avg_lat_us = sum(self.latencies_us) / len(self.latencies_us) if self.latencies_us else 0.0
-                jitter_us = (max(self.latencies_us) - min(self.latencies_us)) if len(self.latencies_us) > 1 else 0.0
+                jitter_us = self.jitter_us
 
                 with self.lock:
                     self.status["state"] = state
@@ -396,6 +449,8 @@ class SystemManager:
                     self.status["motor2"]["output_a"] = round(out, 3)
                     self.status["sync"]["error_deg"] = round(err, 2)
                     self.status["sync"]["seq"] = seq
+                    self.status["sync"]["lost_pkts"] = lost + net_lost
+                    self.status["sync"]["loop"] = loop.stats()
                     self.status["sync"]["lat_ms"] = round(lat_ms, 3)
                     self.status["sync"]["lat_us"] = round(lat_us, 1)
                     self.status["sync"]["avg_lat_us"] = round(avg_lat_us, 1)
@@ -418,11 +473,11 @@ class SystemManager:
         period = 1.0 / float(cfg.sender.rate_hz)
         loop = timing.PeriodicLoop(period)
         unw = angle.Unwrapper()
-        rpm_set = float(cfg.sender.initial_rpm)
+        rpm_set = min(abs(float(cfg.sender.initial_rpm)), self.max_rpm) * (1 if float(cfg.sender.initial_rpm) >= 0 else -1)
+        ramp = RampLimiter(cfg.sender.ramp_rpm_s)
+        ramp.set_target(rpm_set)
 
         motor.open()
-        if rpm_set:
-            motor.set_speed_rpm(rpm_set)
         seq = 0
         with self.lock:
             self.status["state"] = "RUN"
@@ -435,10 +490,13 @@ class SystemManager:
                     k, v = self.commands.get()
                     if k == "rpm":
                         rpm_set = float(v)
-                        motor.set_speed_rpm(rpm_set)
+                        ramp.set_target(rpm_set)
                     elif k == "stop":
                         rpm_set = 0.0
+                        ramp.jump(0.0)
                         motor.stop()
+                if ramp.value != ramp.target:
+                    motor.set_speed_rpm(ramp.update(period))
 
                 ms = motor.read()
                 th = unw.update(ms.theta_deg)
@@ -481,7 +539,9 @@ class SystemManager:
         sign = 1.0 if int(rc.direction) >= 0 else -1.0
         ratio = float(rc.ratio)
         max_err = float(rc.max_error_deg)
-        ctrl = receiver.make_controller(rc)
+        ctrl = receiver.make_controller(rc, cfg.safety)
+        sup = safety.Supervisor(cfg.safety, dt, max_err,
+                                float(cfg.sender.max_rpm) * float(cfg.safety.overspeed_factor))
         torque_mode = rc.mode == "torque_pd"
         unw = angle.Unwrapper()
         loop = timing.PeriodicLoop(dt)
@@ -523,7 +583,8 @@ class SystemManager:
                             self.status["state"] = "WAIT"
                             self.status["sync"]["error_deg"] = 0.0
                     elif k == "tune":
-                        max_err = self._apply_tuning(ctrl, v, max_err)
+                        max_err = self._apply_tuning(ctrl, v, max_err, dt, cfg.safety)
+                        sup.max_err = max_err
                         with self.lock:
                             self.status["tuning"] = self._tuning_snapshot(ctrl, max_err)
 
@@ -565,6 +626,7 @@ class SystemManager:
                     if state == "WAIT":
                         off_remote, off_local = remote, local
                         ctrl.reset()
+                        sup.reset()
                         state = "RUN"
                     ref = off_local + sign * ratio * (remote - off_remote)
                     w_ref = sign * ratio * pkt.omega_rpm * 6.0
@@ -577,21 +639,26 @@ class SystemManager:
                     if pkt.seq != self._last_logged_seq:
                         self._last_logged_seq = pkt.seq
                         self.latencies_us.append(lat_us)
+                        self._note_jitter(lat_us)
                         entry = self._packet_entry(pkt, t_rx_wall, lat_us, lat_ms, pkt.theta_deg,
                                                    local, err, ms.speed_rpm, max_err)
                         self.recent_packets.append(entry)
                         self.csv_history.append(entry)
 
-                    if abs(err) > max_err:
-                        motor.stop()
-                        state = "FAULT"
-                        with self.lock:
-                            self.status["fault"] = f"Chyba sledovania {err:+.1f}° prekrocila limit {max_err:.0f}°!"
-                    elif torque_mode:
+                    if torque_mode:
                         out = ctrl.update(err, w_ref - ms.speed_rpm * 6.0, dt)
-                        motor.set_torque_a(out)
                     else:
                         out = ctrl.update(err, w_ref, dt)
+                    reason = sup.check(now / 1e9, err, out, getattr(ctrl, "limit", 0.0), ms.speed_rpm)
+                    if reason:
+                        motor.stop()
+                        out = 0.0
+                        state = "FAULT"
+                        with self.lock:
+                            self.status["fault"] = f"Poistka: {reason}"
+                    elif torque_mode:
+                        motor.set_torque_a(out)
+                    else:
                         motor.set_speed_rpm(out)
                 elif state == "RUN":
                     # Pakety neprichadzaju (alebo STOP) -> motor uvolnit
@@ -600,7 +667,7 @@ class SystemManager:
                     state = "WAIT"
 
                 avg_lat_us = sum(self.latencies_us) / len(self.latencies_us) if self.latencies_us else 0.0
-                jitter_us = (max(self.latencies_us) - min(self.latencies_us)) if len(self.latencies_us) > 1 else 0.0
+                jitter_us = self.jitter_us
 
                 with self.lock:
                     self.status["state"] = state
@@ -612,6 +679,7 @@ class SystemManager:
                     self.status["sync"]["error_deg"] = round(err, 2)
                     self.status["sync"]["seq"] = max(last_seq, 0)
                     self.status["sync"]["lost_pkts"] = lost
+                    self.status["sync"]["loop"] = loop.stats()
                     self.status["sync"]["lat_ms"] = round(lat_ms, 3)
                     self.status["sync"]["lat_us"] = round(lat_us, 1)
                     self.status["sync"]["avg_lat_us"] = round(avg_lat_us, 1)
@@ -632,16 +700,38 @@ class SystemManager:
             "slew_a_s": getattr(ctrl, "slew", 0.0), "max_error_deg": max_err,
         }
 
+    def request_tuning(self, params):
+        """Vola HTTP vlakno: obmedzi parametre na stabilny rozsah (safety.clamp_gains, moze trvat
+        desiatky ms, preto nie v riadiacej slucke) a posle ich workeru."""
+        with self.lock:
+            cur = dict(self.status["tuning"])
+        cur.update(params)
+        if self.speed_p:                    # jine jednotky (rpm/deg): overenie stability sa nepouzije
+            self.send_command("tune", cur)
+            return cur, []
+        v, warns = safety.clamp_gains(cur["kp"], cur["kd"], cur["ki"], cur["torque_limit_a"],
+                                      cur["slew_a_s"], cur["max_error_deg"], self.dt, self.safety_cfg)
+        with self.lock:
+            self.status["tuning_warn"] = warns
+        self.send_command("tune", v)
+        return v, warns
+
     @staticmethod
-    def _apply_tuning(ctrl, params, max_err):
-        """Aplikuje (uz overene) parametre na regulator a vrati aktualny max_err."""
-        for key, attr in (("kp", "kp"), ("kd", "kd"), ("ki", "ki"),
-                          ("torque_limit_a", "limit"), ("slew_a_s", "slew")):
-            if key in params and hasattr(ctrl, attr):
-                setattr(ctrl, attr, float(params[key]))
-        if "max_error_deg" in params:
-            max_err = float(params["max_error_deg"])
-        return max_err
+    def _apply_tuning(ctrl, v, max_err, dt=None, sc=None):
+        """Aplikuje uz obmedzene parametre na regulator a vrati aktualny max_err."""
+        if hasattr(ctrl, "kd"):
+            ctrl.kp, ctrl.kd, ctrl.ki = v["kp"], v["kd"], v["ki"]
+            ctrl.limit, ctrl.slew = v["torque_limit_a"], v["slew_a_s"]
+            ctrl.reset()                    # nove nastavenie nesmie zdedit stary integrator
+        else:
+            ctrl.kp = v["kp"]
+        return v.get("max_error_deg", max_err)
+
+    def _note_jitter(self, lat_us):
+        """Jitter podla RFC 3550: vyhladena stredna absolutna zmena latencie (odolna voci spike)."""
+        if self._prev_lat_us is not None:
+            self.jitter_us += (abs(lat_us - self._prev_lat_us) - self.jitter_us) / 16.0
+        self._prev_lat_us = lat_us
 
     @staticmethod
     def _packet_entry(pkt, t_rx_wall_ns, lat_us, lat_ms, theta_remote, local, err, speed_rpm, max_err):
@@ -732,8 +822,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                         if not lo <= v <= hi:
                             raise ValueError(f"{key} mimo rozsahu <{lo}, {hi}>")
                         params[key] = v
-                mgr.send_command("tune", params)
-                self._send_json({"ok": True, "tuning": params})
+                applied, warns = mgr.request_tuning(params)
+                self._send_json({"ok": True, "tuning": applied, "warnings": warns})
             else:
                 self.send_error(404, "Endpoint nenajdeny")
         except ValueError as err:

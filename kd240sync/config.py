@@ -16,10 +16,36 @@ DEFAULTS = {
                 "tau_speed": 0.05, "accel_limit_rpm_s": 20000.0,
                 "counts_per_rev": 4096},
     },
+    "safety": {
+        # Model sustavy pre overenie stability zosilneni (Ka = kt/J, rad/s^2 na 1 A).
+        # V simulacii 2500; na realnom motore ODMERAT (README, Ladenie regulatora).
+        "ka_rad_s2_per_a": 2500.0,
+        "ka_lo": 0.5,             # zosilnenia musia byt stabilne pre Ka v [lo, hi] * Ka
+        "ka_hi": 2.0,
+        "tau_i_s": 0.002,         # odhad casovej konstanty prudovej slucky
+        "max_torque_a": 2.0,      # tvrdy strop limitu momentu, ktory sa da nastavit
+        "max_slew_a_s": 1000.0,
+        "max_error_cap_deg": 180.0,
+        "spike_deg": 45.0,        # skokova zmena chyby za jeden cyklus -> FAULT
+        "sat_s": 0.6,             # vystup nasyteny dlhsie nez toto pri chybe > 5 deg -> FAULT
+        "osc_amp_deg": 4.0,       # kmitanie: aspon osc_flips zmien znamienka za 1 s
+        "osc_flips": 14,
+        "overrun_factor": 20.0,   # vypadok cyklu dlhsi nez N periodam -> FAULT
+        "overspeed_factor": 1.25, # nad sender.max_rpm * faktor -> FAULT
+    },
+    "sim_net": {
+        # Model TSN linky len pre demo v dashboarde (realna siet sa neovplyvnuje)
+        "delay_us": 150.0,        # typicke jednosmerne oneskorenie
+        "jitter_us": 25.0,        # smerodajna odchylka
+        "spike_prob": 0.002,      # pravdepodobnost oneskoreneho paketu
+        "spike_us": 1500.0,       # dodatocne oneskorenie pri spike
+        "loss": 0.0,              # pravdepodobnost straty paketu
+    },
     "sender": {
         "rate_hz": 200.0,
         "initial_rpm": 0.0,
         "max_rpm": 2000.0,
+        "ramp_rpm_s": 500.0,      # max. zrychlenie ziadanej rychlosti, 0 = bez rampy
         "min_rpm_warn": 250.0,    # pod tuto rychlost sa motor nemusi rozbehnut
         "spin_us": 0,
         "log_path": "",
@@ -34,11 +60,12 @@ DEFAULTS = {
         "spin_us": 0,
         "log_path": "",
         "status_period_s": 1.0,
-        # Vyladene parametre pre simulaciu (200 Hz, SimMotor):
+        # Zosilnenia musia prejst overenim stability v kd240sync/safety.py (inak sa znizia).
         # Kp = moment [A] na stupen chyby; Kd = tlmenie na rychlostnu chybu
-        # Na realnej doske treba znizit kp na 0.011 a kd na 0.00045
-        "torque_pd": {"kp_a_per_deg": 0.08, "kd_a_per_dps": 0.002,
-                      "ki_a_per_deg_s": 0.002, "i_limit_a": 0.15,
+        # Na realnej doske zacni s kp 0.011 a kd 0.00045
+        "torque_pd": {"kp_a_per_deg": 0.022, "kd_a_per_dps": 0.00045,
+                      "ki_a_per_deg_s": 0.0004, "i_limit_a": 0.15,
+                      "deadband_deg": 0.2,      # ~2 impulzy enkodera; 0 = vypnute
                       "torque_limit_a": 1.5, "slew_a_s": 500.0},
         "speed_p": {"kp_rpm_per_deg": 5.0, "max_rpm": 1500.0},
     },

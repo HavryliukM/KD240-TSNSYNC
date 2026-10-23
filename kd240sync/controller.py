@@ -11,8 +11,9 @@ class TorquePD:
     u = kp*e + kd*(w_ref - w) + integral(ki*e), s limitom a obmedzenim rychlosti zmeny.
     """
 
-    def __init__(self, kp, kd, ki=0.0, limit_a=0.3, slew_a_s=50.0, i_limit_a=0.05):
+    def __init__(self, kp, kd, ki=0.0, limit_a=0.3, slew_a_s=50.0, i_limit_a=0.05, deadband_deg=0.0):
         self.kp, self.kd, self.ki = kp, kd, ki
+        self.deadband = float(deadband_deg)
         self.limit, self.slew, self.i_limit = limit_a, slew_a_s, i_limit_a
         self.reset()
 
@@ -21,6 +22,12 @@ class TorquePD:
         self.out = 0.0
 
     def update(self, e_deg, w_err_dps, dt):
+        # mala mrtva zona okolo nuly: kvantovanie enkodera by inak v kluzi vyrabalo
+        # trvale mikro-kmity momentu (motor sa 'chvie' na -0.1 rpm)
+        if self.deadband > 0.0:
+            e_deg -= max(-self.deadband, min(self.deadband, e_deg))
+            if e_deg == 0.0 and abs(w_err_dps) < 1.0:
+                w_err_dps = 0.0
         u = self.kp * e_deg + self.kd * w_err_dps
         if self.ki:
             cand = _clamp(self.integ + self.ki * e_deg * dt, -self.i_limit, self.i_limit)
@@ -47,3 +54,26 @@ class SpeedP:
         rpm = w_ff_dps / 6.0 + self.kp * e_deg
         self.out = _clamp(rpm, -self.max_rpm, self.max_rpm)
         return self.out
+
+
+class RampLimiter:
+    """Obmedzuje zrychlenie ziadanej rychlosti [rpm/s], aby skok nezhodil sledovanie."""
+
+    def __init__(self, rate_rpm_s, value=0.0):
+        self.rate = float(rate_rpm_s)
+        self.target = self.value = float(value)
+
+    def set_target(self, rpm):
+        self.target = float(rpm)
+
+    def jump(self, rpm=0.0):
+        """Okamzite nastavenie (napr. po STOP), bez rampy."""
+        self.target = self.value = float(rpm)
+
+    def update(self, dt):
+        if self.rate <= 0:                      # 0 = rampa vypnuta
+            self.value = self.target
+            return self.value
+        step = self.rate * dt
+        self.value += max(-step, min(step, self.target - self.value))
+        return self.value
