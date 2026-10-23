@@ -17,29 +17,8 @@ enkodér 1 -> uhol -> UDP paket ===== TSN link =====> uhol -> regulátor polohy
 
 ---
 
-## Ciele a zadanie práce
-
-Projekt priamo napĺňa jednotlivé body zadania záverečnej práce:
-
-> **1. Navrhnite architektúru distribuovaného systému pozostávajúceho z dvoch uzlov Kria KD240 prepojených prostredníctvom siete TSN.**  
-> **2. Implementujte komunikačné a riadiace funkcie systému, vrátane výmeny dát medzi uzlami.**  
-> **3. Realizujte riadenie elektrických pohonov pripojených k jednotlivým uzlom a zabezpečte ich koordinovanú činnosť.**  
-> **4. Experimentálne overte navrhnuté riešenie a vyhodnoťte dosiahnuté parametre synchronizácie, komunikácie a presnosti pohybu.**
-
-### Mapovanie zadania na implementáciu
-
-| Bod zadania | Riešenie v tomto projekte | Implementované súbory / Nástroje |
-|---|---|---|
-| **2. Architektúra 2× KD240 + TSN** | Dva uzly (Doska 1: Master/Sender, Doska 2: Slave/Receiver) prepojené priamym ethernetovým TSN spojom cez porty J25B. Využíva IEEE 802.1Qbv plánovanie časových slotov, IEEE 802.1AS PTP synchronizáciu a VLAN 20 s PCP 4. | [board1.toml](file:///c:/Projects/DP/kd240-tsn-sync/config/board1.toml), [board2.toml](file:///c:/Projects/DP/kd240-tsn-sync/config/board2.toml), [setup_board.sh](file:///c:/Projects/DP/kd240-tsn-sync/scripts/setup_board.sh) |
-| **3. Komunikácia a výmena dát** | Binárny UDP protokol (28 bajtov: nanosekundové časové značky, poradové čísla, uhol, rýchlosť, príznaky VALID/STOP). Asynchrónne prijímacie vlákno s časovou extrapoláciou o vek paketu, detekciou strát/preusporiadania a periodická riadiaca slučka 200 Hz s meraním jitteru. | [protocol.py](file:///c:/Projects/DP/kd240-tsn-sync/kd240sync/protocol.py), [net.py](file:///c:/Projects/DP/kd240-tsn-sync/kd240sync/net.py), [timing.py](file:///c:/Projects/DP/kd240-tsn-sync/kd240sync/timing.py), [sender.py](file:///c:/Projects/DP/kd240-tsn-sync/kd240sync/sender.py), [receiver.py](file:///c:/Projects/DP/kd240-tsn-sync/kd240sync/receiver.py) |
-| **4. Riadenie pohonov a synchronizácia** | Integrácia s C++ FOC motorovou knižnicou AMD cez modul `py_foc_motor_ctrl`. Samostatné ovládanie pohonov cez CLI. Algoritmus rozvíjania uhla enkodéra (`Unwrapper`) a spätnoväzbový regulátor polohy (`TorquePD` / `SpeedP`), ktorý zabezpečuje synchronizovaný elektronický prevod bez trhnutia. Bezpečnostné poistky (timeout 50 ms, prúdové obmedzenie, limit chyby). | [foc_lib.py](file:///c:/Projects/DP/kd240-tsn-sync/kd240sync/motor/foc_lib.py), [motor_cli.py](file:///c:/Projects/DP/kd240-tsn-sync/tools/motor_cli.py), [controller.py](file:///c:/Projects/DP/kd240-tsn-sync/kd240sync/controller.py), [angle.py](file:///c:/Projects/DP/kd240-tsn-sync/kd240sync/angle.py) |
-| **5. Experimentálne overenie a vyhodnotenie** | 5 experimentálnych scenárov (A–E): integrita komunikácie a latencia pri generovaní rušiacej prevádzky (`udp_load.py`), vplyv Qbv na časové parametre, presnosť sledovania polohy (RMS a maximálna chyba v stupňoch) a automatické generovanie CSV logov s vyhodnocovacím nástrojom. | [analyze_log.py](file:///c:/Projects/DP/kd240-tsn-sync/tools/analyze_log.py), [udp_load.py](file:///c:/Projects/DP/kd240-tsn-sync/tools/udp_load.py), [tests/](file:///c:/Projects/DP/kd240-tsn-sync/tests/) |
-
----
-
 ## Obsah
 
-- [Ciele a zadanie práce](#ciele-a-zadanie-práce)
 - [Ako to funguje](#ako-to-funguje)
 - [Štruktúra repozitára](#štruktúra-repozitára)
 - [Hardvér a zapojenie](#hardvér-a-zapojenie)
@@ -55,10 +34,10 @@ Projekt priamo napĺňa jednotlivé body zadania záverečnej práce:
 - [Konfigurácia (TOML)](#konfigurácia-toml)
 - [Logy a vyhodnotenie](#logy-a-vyhodnotenie)
 - [Ladenie regulátora](#ladenie-regulátora)
-- [Merania pre záverečnú prácu](#merania-pre-záverečnú-prácu)
+- [Záťažový test siete](#záťažový-test-siete)
 - [Riešenie problémov](#riešenie-problémov)
 - [Bezpečnosť](#bezpečnosť)
-- [TODO a známe limity](#todo-a-známe-limity)
+- [Známe limity](#známe-limity)
 
 ---
 
@@ -379,7 +358,7 @@ Zobrazí sa interaktívny prompt `[motor_cli]`:
 
 ## Vlastný Web Dashboard (riadenie & vizualizácia)
 
-Pre komfortné grafické riadenie a živé sledovanie synchronizácie v internetovom prehliadači sme vytvorili **vlastný moderný Web Dashboard** ([`web/server.py`](file:///c:/Projects/DP/kd240-tsn-sync/web/server.py)).
+Pre komfortné grafické riadenie a živé sledovanie synchronizácie v internetovom prehliadači sme vytvorili **vlastný moderný Web Dashboard** ([`web/server.py`](web/server.py)).
 
 Na rozdiel od AMD Bokeh dashboardu (ktorý slúži len na manuálne nastavovanie jedného nezosynchronizovaného motora):
 - **Zobrazuje oba motory súčasne** — uhol a otáčky Motora 1 (Master) aj Motora 2 (Slave).
@@ -697,19 +676,9 @@ Obmedzenie: `wn × T < 0.2` (pri 200 Hz → `wn < 40 rad/s`).
 
 ---
 
-## Merania pre záverečnú prácu
+## Záťažový test siete
 
-### Experimenty
-
-| ID | Popis |
-|----|-------|
-| A | Východzí stav, bez ďalšej prevádzky |
-| B | S pozadovou best-effort prevádzkou, bez Qbv |
-| C | S pozadovou prevádzkou a Qbv rozvrhom |
-| D | Rôzne frekvencie slučiek (100, 200, 500 Hz) |
-| E | `torque_pd` vs. `speed_p` |
-
-### Generovanie pozadovej prevádzky
+Generátor pozadovej UDP prevádzky (`tools/udp_load.py`) slúži na overenie, ako sa synchronizácia správa pri zaťaženej sieti.
 
 Doska 2 (sink):
 ```bash
@@ -759,32 +728,7 @@ python3 tools/udp_load.py 111.222.0.20 --mbit 300 --seconds 60 --priority 1
 
 ---
 
-## TODO a známe limity
-
-### Hotové veci (vyriešené)
-
-- [x] **Implementovaný adaptér `kd240sync/motor/foc_lib.py`** — prepojený s C++ knižnicou AMD cez `py_foc_motor_ctrl` (režimy Speed, Torque, Off, čítanie polohy z enkodéra, otáčok, vymazávanie porúch).
-- [x] **Samostatný ovládací nástroj `tools/motor_cli.py`** a `scripts/run_motor_cli.sh` — priame ovládanie a monitorovanie motora z terminálu bez Bokeh dashboardu.
-- [x] **Skripty na nahratie projektu na dosku** — `scripts/upload_to_board.ps1` (z Windows cez PowerShell) a `scripts/upload_to_board.sh` (z Linux/WSL).
-- [x] **Automatické testy** — unit testy pre protokol, unwrapper, regulátory, slučku, simuláciu a adaptér `foc_lib` (18 testov).
-- [x] **Web Dashboard a Real-time Tuning** — moderný dashboard s obojsmerným riadením, ladením regulátora za behu, elimináciou sieťovej latencie a profesionálnym technickým dizajnom bez emojis.
-
-### Pravidlá formátovania a UI dizajnu
-
-- **Prísny zákaz emojis:** V celom projekte (kód, webové rozhranie, komentáre, dokumentácia) je prísne zakázané používať emojis. Pôsobia neprofesionálne.
-- **Vizuálny štýl:** Používať výhradne profesionálne SVG ikony, technické farebné štítky a čistú typografiu.
-- **Komentáre:** Všetky kľúčové funkcie a regulačné algoritmy musia mať odborné a vecné komentáre.
-
-### Zostávajúce úlohy (vyžadujú fyzickú dosku s pripojeným motorom)
-
-1. **Nahrať projekt na dosku** pomocou `.\scripts\upload_to_board.ps1 -BoardIp <IP_DOSKY>`.
-2. **Overiť motor cez `run_motor_cli.sh`** na doske (najprv len monitorovanie `--monitor`, potom malý rozbeh `--speed 300`).
-3. **Overiť čítanie enkodéra cez sysfs** (`tools/check_encoder.py`) — ak vráti `raw = 0`, je potvrdené, že polohu treba čítať výhradne cez motorovú knižnicu `foc_lib`.
-4. **Nastaviť a overiť TSN sieť s dvoma doskami** (`ping 111.222.0.20`, `tcpdump -i ep.20 -e -n udp`).
-5. **Doladiť zosilnenia polohového regulátora na skutočnom motore** (východzie hodnoty v `board2.toml` sú zo simulácie).
-6. **Synchronizovať systémový čas s PTP** (`phc2sys`), ak chceš merať jednosmerné sieťové oneskorenie priamo z CSV logov.
-
-### Známe limity
+## Známe limity
 
 - Python nie je real-time — jitter slučiek treba zmerať na doske
 - Parametre regulátora pochádzajú zo simulácie, nie z merania
@@ -796,4 +740,4 @@ python3 tools/udp_load.py 111.222.0.20 --mbit 300 --seconds 60 --priority 1
 
 ## Licencia
 
-Interný projekt pre záverečnú prácu.
+Licencia zatiaľ nie je určená.
