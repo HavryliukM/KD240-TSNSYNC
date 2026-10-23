@@ -1,0 +1,12 @@
+# JEDNA DOSKA: receiver so SIMULOVANYM motorom, prijima uhol zo sendera na localhost.
+[network]
+bind_ip = "127.0.0.1"
+peer_ip = "127.0.0.1"
+port = 5005
+
+[motor]
+backend = "sim"
+
+[receiver]
+rate_hz = 200
+log_path = "receiver_log.csv"

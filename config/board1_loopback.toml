@@ -1,0 +1,17 @@
+# JEDNA DOSKA, test bez druhej dosky: sender so SKUTOCNYM motorom posiela uhol po localhost.
+# Receiver s SIMULOVANYM motorom (config/board2_loopback_sim.toml) bezi na tej istej doske
+# a ukazuje, ako by druhy motor sledoval prvy. Sietove oneskorenie tu nie je TSN.
+[network]
+bind_ip = "127.0.0.1"
+peer_ip = "127.0.0.1"
+port = 5005
+
+[motor]
+backend = "foc_lib"
+[motor.foc_lib]
+module = "py_foc_motor_ctrl"
+
+[sender]
+rate_hz = 200
+initial_rpm = 0
+max_rpm = 500                # prve pokusy opatrne
