@@ -160,15 +160,15 @@
       <section class="card chart-card full-width">
         <div class="card-header chart-header">
           <div>
-            <h2>Živý priebeh synchronizácie (uhol & odchýlka)</h2>
-            <span class="card-desc">Sledovanie natočenia oboch motorov [0° - 360°] a regulačnej odchýlky v reálnom čase</span>
+            <h2>Živý priebeh synchronizácie (otáčky & odchýlka)</h2>
+            <span class="card-desc">Otáčky oboch motorov a odchýlka polohy v reálnom čase, osi sa prispôsobujú rozsahu hodnôt</span>
           </div>
           <div class="chart-legend">
             <button type="button" class="legend-toggle active" id="toggle-m1" title="Kliknutím skryť/zobraziť krivku">
-              <span class="dot legend-m1"></span> Motor 1 (Master): <strong id="legend-m1-val">0.0°</strong>
+              <span class="dot legend-m1"></span> Motor 1 (Master): <strong id="legend-m1-val">0.0 rpm</strong>
             </button>
             <button type="button" class="legend-toggle active" id="toggle-m2" title="Kliknutím skryť/zobraziť krivku">
-              <span class="dot legend-m2"></span> Motor 2 (Slave): <strong id="legend-m2-val">0.0°</strong>
+              <span class="dot legend-m2"></span> Motor 2 (Slave): <strong id="legend-m2-val">0.0 rpm</strong>
             </button>
             <button type="button" class="legend-toggle active" id="toggle-err" title="Kliknutím skryť/zobraziť krivku">
               <span class="dot legend-err"></span> Odchýlka: <strong id="legend-err-val">0.00°</strong>
@@ -368,9 +368,9 @@
               <span class="tuning-hint">Eliminácia statickej odchýlky</span>
             </div>
             <div class="tuning-input-row">
-              <input type="range" id="tune-ki-slider" min="0.0000" max="0.0050" step="0.0001" value="0.0004">
+              <input type="range" id="tune-ki-slider" min="0.0000" max="0.0500" step="0.001" value="0.02">
               <div class="input-with-unit mini">
-                <input type="number" id="tune-ki" value="0.0004" min="0.0000" max="0.0500" step="0.0001">
+                <input type="number" id="tune-ki" value="0.02" min="0.0000" max="0.0500" step="0.0001">
                 <span>A/(°·s)</span>
               </div>
             </div>

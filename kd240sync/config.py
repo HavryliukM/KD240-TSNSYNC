@@ -64,8 +64,8 @@ DEFAULTS = {
         # Kp = moment [A] na stupen chyby; Kd = tlmenie na rychlostnu chybu
         # Na realnej doske zacni s kp 0.011 a kd 0.00045
         "torque_pd": {"kp_a_per_deg": 0.022, "kd_a_per_dps": 0.00045,
-                      "ki_a_per_deg_s": 0.0004, "i_limit_a": 0.15,
-                      "deadband_deg": 0.2,      # ~2 impulzy enkodera; 0 = vypnute
+                      "ki_a_per_deg_s": 0.02, "i_limit_a": 0.15,
+                      "deadband_deg": 0.1,      # ~1 impulz enkodera; 0 = vypnute
                       "torque_limit_a": 1.5, "slew_a_s": 500.0},
         "speed_p": {"kp_rpm_per_deg": 5.0, "max_rpm": 1500.0},
     },

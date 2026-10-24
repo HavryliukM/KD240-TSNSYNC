@@ -24,13 +24,16 @@ class TorquePD:
     def update(self, e_deg, w_err_dps, dt):
         # mala mrtva zona okolo nuly: kvantovanie enkodera by inak v kluzi vyrabalo
         # trvale mikro-kmity momentu (motor sa 'chvie' na -0.1 rpm)
+        e_raw = e_deg
         if self.deadband > 0.0:
             e_deg -= max(-self.deadband, min(self.deadband, e_deg))
             if e_deg == 0.0 and abs(w_err_dps) < 1.0:
                 w_err_dps = 0.0
         u = self.kp * e_deg + self.kd * w_err_dps
         if self.ki:
-            cand = _clamp(self.integ + self.ki * e_deg * dt, -self.i_limit, self.i_limit)
+            # integrator pracuje s nezmensenou chybou: P-clen v mrtvej zone je prilis slaby
+            # na prekonanie trenia, a prave integrator musi zvysnu odchylku dotiahnut na nulu
+            cand = _clamp(self.integ + self.ki * e_raw * dt, -self.i_limit, self.i_limit)
             if abs(u + cand) <= self.limit:   # anti-windup: integruj len mimo saturacie
                 self.integ = cand
             u += self.integ

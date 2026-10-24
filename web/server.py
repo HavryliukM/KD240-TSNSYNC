@@ -132,7 +132,7 @@ class SystemManager:
             "tuning": {
                 "kp": 0.022,
                 "kd": 0.00045,
-                "ki": 0.0004,
+                "ki": 0.02,
                 "torque_limit_a": 1.5,
                 "slew_a_s": 500.0,
                 "max_error_deg": 60.0,

@@ -72,8 +72,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const ctx = canvas.getContext('2d');
   const MAX_HISTORY = 120; // ~12 seconds of history at 10 Hz
   const history = {
-    m1: [],
-    m2: [],
+    s1: [],
+    s2: [],
     err: [],
   };
 
@@ -195,16 +195,16 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if (presetSimTune) {
-    presetSimTune.addEventListener('click', () => applyTuningPreset(0.022, 0.00045, 0.0004, 1.5, 500, 60));
+    presetSimTune.addEventListener('click', () => applyTuningPreset(0.022, 0.00045, 0.02, 1.5, 500, 60));
   }
   if (presetHwTune) {
     presetHwTune.addEventListener('click', () => applyTuningPreset(0.011, 0.00045, 0.0000, 0.1, 20, 60));
   }
   if (presetStrictTune) {
-    presetStrictTune.addEventListener('click', () => applyTuningPreset(0.026, 0.00045, 0.0005, 2.0, 800, 30));
+    presetStrictTune.addEventListener('click', () => applyTuningPreset(0.026, 0.00045, 0.03, 2.0, 800, 30));
   }
   if (btnResetTuning) {
-    btnResetTuning.addEventListener('click', () => applyTuningPreset(0.022, 0.00045, 0.0004, 1.5, 500, 60));
+    btnResetTuning.addEventListener('click', () => applyTuningPreset(0.022, 0.00045, 0.02, 1.5, 500, 60));
   }
 
   async function sendTuning() {
@@ -216,7 +216,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const payload = {
       kp: num(tuneKpInput, 0.022),
       kd: num(tuneKdInput, 0.00045),
-      ki: num(tuneKiInput, 0.0004),
+      ki: num(tuneKiInput, 0.02),
       torque_limit_a: num(tuneLimitInput, 1.5),
       slew_a_s: num(tuneSlewInput, 500.0),
       max_error_deg: num(tuneMaxerrInput, 60.0),
@@ -448,25 +448,117 @@ document.addEventListener('DOMContentLoaded', () => {
       }).join('');
     }
 
-    // Live Legend values — use 0-360° normalized angle
-    legendM1Val.textContent = `${m1Mod.toFixed(1)}°`;
-    legendM2Val.textContent = `${m2Mod.toFixed(1)}°`;
+    // Live Legend values: otacky oboch motorov a aktualna odchylka
+    const sp1 = cleanNum(data.motor1.speed_rpm, 0.5);
+    const sp2 = cleanNum(data.motor2.speed_rpm, 0.5);
+    legendM1Val.textContent = `${sp1.toFixed(1)} rpm`;
+    legendM2Val.textContent = `${sp2.toFixed(1)} rpm`;
     legendErrVal.textContent = `${(err >= 0 ? '+' : '')}${err.toFixed(2)}°`;
 
-    // History ring buffer — use theta_mod (0-360°) directly from server
-    const m1Norm = m1Mod;
-    const m2Norm = m2Mod;
-    history.m1.push(m1Norm);
-    history.m2.push(m2Norm);
+    // History ring buffer
+    history.s1.push(sp1);
+    history.s2.push(sp2);
     history.err.push(err);
-
-    if (history.m1.length > MAX_HISTORY) {
-      history.m1.shift();
-      history.m2.shift();
+    if (history.s1.length > MAX_HISTORY) {
+      history.s1.shift();
+      history.s2.shift();
       history.err.shift();
     }
 
     drawChart();
+  }
+
+  // Zaokruhli rozsah osi na "pekne" hodnoty (1, 2, 5 x 10^n)
+  function niceStep(raw) {
+    const p = Math.pow(10, Math.floor(Math.log10(raw)));
+    const f = raw / p;
+    return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p;
+  }
+
+  // Jeden panel grafu: os Y sa prisposobuje datam, aby boli viditelne aj male rozdiely
+  function drawPanel(box, series, opt) {
+    const { x, y, w, h } = box;
+    let lo = Infinity, hi = -Infinity;
+    series.forEach((s) => {
+      if (!s.visible) return;
+      s.data.forEach((v) => { lo = Math.min(lo, v); hi = Math.max(hi, v); });
+    });
+    if (!Number.isFinite(lo)) { lo = 0; hi = 0; }
+    if (opt.symmetric) {
+      const m = Math.max(Math.abs(lo), Math.abs(hi), opt.minSpan / 2);
+      lo = -m * 1.15; hi = m * 1.15;
+    } else {
+      const span = Math.max(hi - lo, opt.minSpan);
+      const mid = (hi + lo) / 2;
+      lo = mid - span * 0.6; hi = mid + span * 0.6;
+    }
+    const step = niceStep((hi - lo) / 4);
+    lo = Math.floor(lo / step) * step;
+    hi = Math.ceil(hi / step) * step;
+    const yOf = (v) => y + h - ((v - lo) / (hi - lo)) * h;
+
+    // Pozadie panela a tolerancne pasmo
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.015)';
+    ctx.fillRect(x, y, w, h);
+    if (opt.tolerance) {
+      const t0 = yOf(opt.tolerance), t1 = yOf(-opt.tolerance);
+      ctx.fillStyle = 'rgba(16, 185, 129, 0.08)';
+      ctx.fillRect(x, Math.max(y, t0), w, Math.min(y + h, t1) - Math.max(y, t0));
+      ctx.strokeStyle = 'rgba(16, 185, 129, 0.3)';
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      [t0, t1].forEach((ty) => {
+        if (ty >= y && ty <= y + h) { ctx.moveTo(x, ty); ctx.lineTo(x + w, ty); }
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Mriezka a popisky osi
+    ctx.font = '10px "Inter", -apple-system, sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'right';
+    const decimals = step < 0.1 ? 2 : step < 1 ? 1 : 0;
+    for (let v = lo; v <= hi + step / 2; v += step) {
+      const gy = yOf(v);
+      ctx.strokeStyle = Math.abs(v) < step / 2 ? 'rgba(255, 255, 255, 0.22)' : 'rgba(255, 255, 255, 0.06)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, gy);
+      ctx.lineTo(x + w, gy);
+      ctx.stroke();
+      ctx.fillStyle = '#64748b';
+      ctx.fillText(v.toFixed(decimals) + opt.unit, x - 8, gy);
+    }
+    ctx.font = '9px "Inter", -apple-system, sans-serif';
+    ctx.fillStyle = '#94a3b8';
+    ctx.textAlign = 'left';
+    ctx.fillText(opt.title, x + 6, y + 9);
+
+    // Krivky (clip, aby sa nevykreslovali mimo panela)
+    const n = series[0].data.length;
+    if (n < 2) return;
+    const dx = w / (MAX_HISTORY - 1);
+    const startX = x + (MAX_HISTORY - n) * dx;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
+    series.forEach((s) => {
+      if (!s.visible) return;
+      ctx.strokeStyle = s.color;
+      ctx.lineWidth = s.width;
+      ctx.lineJoin = 'round';
+      ctx.setLineDash(s.dash || []);
+      ctx.beginPath();
+      s.data.forEach((v, i) => {
+        const px = startX + i * dx;
+        if (i === 0) ctx.moveTo(px, yOf(v)); else ctx.lineTo(px, yOf(v));
+      });
+      ctx.stroke();
+    });
+    ctx.setLineDash([]);
+    ctx.restore();
   }
 
   function drawChart() {
@@ -476,7 +568,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const dpr = window.devicePixelRatio || 1;
     const targetW = Math.floor(rect.width * dpr);
     const targetH = Math.floor(rect.height * dpr);
-
     if (canvas.width !== targetW || canvas.height !== targetH) {
       canvas.width = targetW;
       canvas.height = targetH;
@@ -484,173 +575,46 @@ document.addEventListener('DOMContentLoaded', () => {
 
     ctx.save();
     ctx.scale(dpr, dpr);
-
     const w = rect.width;
     const h = rect.height;
-
-    // Correctly clear entire visible canvas
     ctx.clearRect(0, 0, w, h);
 
-    // Padding for industrial axes
-    const padLeft = 44;   // for 0..360° angle labels
-    const padRight = 44;  // for -10..+10° error labels
-    const padTop = 22;
-    const padBottom = 24;
+    const padLeft = 56;
+    const padRight = 16;
+    const padTop = 8;
+    const padBottom = 22;
+    const gap = 14;
     const plotW = w - padLeft - padRight;
-    const plotH = h - padTop - padBottom;
-
-    if (plotW <= 10 || plotH <= 10) {
+    const plotH = h - padTop - padBottom - gap;
+    if (plotW <= 10 || plotH <= 20) {
       ctx.restore();
       return;
     }
+    const topH = plotH * 0.5;
+    const botH = plotH - topH;
 
-    // Grid Y steps: 4 intervals (5 lines: 360°, 270°, 180°, 90°, 0°)
-    const angleLabels = ['360°', '270°', '180°', '90°', '0°'];
-    const errorLabels = ['+10°', '+5°', '0°', '-5°', '-10°'];
+    // Horny panel: rychlosti. Motor 1 ako siroka priesvitna ciara, motor 2 tenka a ostra
+    // navrchu, aby bol viditelny aj ked sa krivky prekryvaju.
+    drawPanel({ x: padLeft, y: padTop, w: plotW, h: topH }, [
+      { data: history.s1, color: 'rgba(0, 240, 255, 0.45)', width: 6, visible: visibleSeries.m1 },
+      { data: history.s2, color: '#10b981', width: 2, visible: visibleSeries.m2 },
+    ], { title: 'OTÁČKY [rpm]', unit: '', minSpan: 20 });
 
-    // Draw ±2° error tolerance zone around center line (180° / 0° error)
-    // 2° / 10° = 20% of half height (10% of plotH)
-    const yCenter = padTop + plotH * 0.5;
-    const tolBandH = (2.0 / 10.0) * (plotH * 0.5);
+    // Dolny panel: odchylka polohy s automaticky prisposobenou osou (min. +-1 deg)
+    drawPanel({ x: padLeft, y: padTop + topH + gap, w: plotW, h: botH }, [
+      { data: history.err, color: '#f59e0b', width: 2, visible: visibleSeries.err },
+    ], { title: 'ODCHÝLKA POLOHY [°]', unit: '°', symmetric: true, minSpan: 2, tolerance: 2.0 });
 
-    ctx.fillStyle = 'rgba(16, 185, 129, 0.08)';
-    ctx.fillRect(padLeft, yCenter - tolBandH, plotW, tolBandH * 2);
-
-    // Tolerance zone borders
-    ctx.strokeStyle = 'rgba(16, 185, 129, 0.25)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([3, 3]);
-    ctx.beginPath();
-    ctx.moveTo(padLeft, yCenter - tolBandH);
-    ctx.lineTo(padLeft + plotW, yCenter - tolBandH);
-    ctx.moveTo(padLeft, yCenter + tolBandH);
-    ctx.lineTo(padLeft + plotW, yCenter + tolBandH);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Draw horizontal grid lines & labels
-    ctx.font = '10px "Inter", -apple-system, sans-serif';
-    ctx.textBaseline = 'middle';
-
-    for (let i = 0; i <= 4; i++) {
-      const y = padTop + (plotH / 4) * i;
-
-      // Line
-      ctx.beginPath();
-      if (i === 2) {
-        // Center line (Error 0.00°)
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-        ctx.lineWidth = 1.2;
-      } else {
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
-        ctx.lineWidth = 1;
-      }
-      ctx.moveTo(padLeft, y);
-      ctx.lineTo(padLeft + plotW, y);
-      ctx.stroke();
-
-      // Left label (Angle)
-      ctx.fillStyle = '#64748b';
-      ctx.textAlign = 'right';
-      ctx.fillText(angleLabels[i], padLeft - 8, y);
-
-      // Right label (Error)
-      ctx.fillStyle = (i === 2) ? '#10b981' : '#f59e0b';
-      ctx.textAlign = 'left';
-      ctx.fillText(errorLabels[i], padLeft + plotW + 8, y);
-    }
-
-    // Axis titles
+    // Casova os
     ctx.font = '9px "Inter", -apple-system, sans-serif';
     ctx.fillStyle = '#475569';
-    ctx.textAlign = 'left';
-    ctx.fillText('UHOL', 4, padTop - 10);
-    ctx.textAlign = 'right';
-    ctx.fillText('ODCHÝLKA', w - 4, padTop - 10);
-
-    // Bottom time ticks
-    ctx.fillStyle = '#475569';
+    ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
     ctx.fillText('-12 s', padLeft, h - 8);
     ctx.textAlign = 'center';
     ctx.fillText('-6 s', padLeft + plotW * 0.5, h - 8);
     ctx.textAlign = 'right';
     ctx.fillText('TERAZ', padLeft + plotW, h - 8);
-
-    const n = history.m1.length;
-    if (n < 2) {
-      ctx.restore();
-      return;
-    }
-
-    const dx = plotW / (MAX_HISTORY - 1);
-    const startX = padLeft + (MAX_HISTORY - n) * dx;
-
-    // Helper: Plot continuous line (0-360° with discontinuous wrap detection)
-    function plotAngleSeries(arr, color, lineW) {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = lineW || 2;
-      // Shadow glow for visibility
-      ctx.shadowBlur = 4;
-      ctx.shadowColor = color;
-      ctx.beginPath();
-      let inPath = false;
-      let lastDeg = null;
-
-      for (let i = 0; i < n; i++) {
-        const x = startX + i * dx;
-        const deg = arr[i];
-        // Map 0..360 -> plotH..0 in the plot area
-        const y = padTop + plotH - (deg / 360.0) * plotH;
-
-        // Detect wrap-around: if consecutive sample jumped more than 270°,
-        // it's a 0/360 wrap — start a new sub-path instead of drawing a vertical spike
-        const isWrap = lastDeg !== null && Math.abs(deg - lastDeg) > 270;
-
-        if (!inPath || isWrap) {
-          ctx.moveTo(x, y);
-          inPath = true;
-        } else {
-          ctx.lineTo(x, y);
-        }
-        lastDeg = deg;
-      }
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-      ctx.shadowColor = 'transparent';
-    }
-
-    // Helper: Plot Error series on [-10° .. +10°] scale around yCenter
-    function plotErrorSeries(arr, color) {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      for (let i = 0; i < n; i++) {
-        const x = startX + i * dx;
-        const e = arr[i];
-        // Clamped to [-10 .. +10] for clean visualization
-        const clampedE = Math.max(-10, Math.min(10, e));
-        const y = yCenter - (clampedE / 10.0) * (plotH * 0.5);
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-    }
-
-    // Render Motor 1 Angle (Cyan halo) if visible
-    if (visibleSeries.m1) {
-      plotAngleSeries(history.m1, '#00f0ff', 3.5);
-    }
-
-    // Render Motor 2 Angle (Emerald core) if visible
-    if (visibleSeries.m2) {
-      plotAngleSeries(history.m2, '#10b981', 1.8);
-    }
-
-    // Render Tracking Error (Amber) if visible
-    if (visibleSeries.err) {
-      plotErrorSeries(history.err, '#f59e0b');
-    }
 
     ctx.restore();
   }
