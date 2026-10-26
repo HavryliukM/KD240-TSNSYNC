@@ -8,8 +8,13 @@ Fyzikalny princip:
   Ka = kt / J  [rad/s^2 na 1 A]
 
 Nastroj posle kratke bezpecne momentove pulzy (napr. 0.25 A na 250 ms),
-zaznamena priebeh otacok s vysokou vzorkovacou frekvenciou,
-vypocita zrychlenie alpha pomocou linearnej regresie a urci Ka.
+zaznamena priebeh otacok s vysokou vzorkovacou frekvenciou
+a vypocita zrychlenie alpha pomocou linearnej regresie.
+
+Trenie sa odpocita meranim pri dvoch prudoch (I_hi a I_lo, obe v oboch smeroch):
+  alpha_hi - alpha_lo = Ka * (I_hi - I_lo)
+Rozdiel zrychleni nezavisi od trenia, preto Ka = (alpha_hi - alpha_lo) / (I_hi - I_lo).
+Jednoprudove Ka = alpha_hi / I_hi sa vypisuje na porovnanie (je o trenie nizsie).
 
 Pouzitie:
   # 1. Na doske KD240 s realnym motorom (vyzaduje sudo a nacitany firmver):
@@ -38,6 +43,7 @@ from kd240sync.motor.base import Motor
 RPM_TO_RAD_S = 2.0 * math.pi / 60.0
 MAX_SAFE_CURRENT_A = 0.5
 MAX_SAFE_DURATION_S = 0.8
+MIN_CURRENT_A = 0.05
 
 
 def linear_regression(x_vals, y_vals):
@@ -127,12 +133,14 @@ def main():
     parser.add_argument("--config", default=None, help="Cesta ku konfiguracnemu TOML suboru")
     parser.add_argument("--current", type=float, default=0.25,
                         help="Velkost testovacieho prudu [A] (default: 0.25 A, max 0.5 A)")
+    parser.add_argument("--current-low", type=float, default=None,
+                        help="Nizsi testovaci prud [A] pre odpocitanie trenia (default: polovica --current)")
     parser.add_argument("--duration", type=float, default=0.25,
                         help="Doba trvania pulzu [s] (default: 0.25 s, max 0.8 s)")
     parser.add_argument("--max-rpm", type=float, default=1500.0,
                         help="Bezpecnostny limit otacok pre prerusenie pulzu (default: 1500 RPM)")
     parser.add_argument("--trials", type=int, default=4,
-                        help="Pocet testovacich pulzov (strieda smery) (default: 4)")
+                        help="Pocet pulzov na kazdu uroven prudu (strieda smery) (default: 4)")
 
     args = parser.parse_args()
 
@@ -144,11 +152,17 @@ def main():
         print(f"Chyba: Doba pulzu {args.duration} s prekracuje bezpecnostny limit {MAX_SAFE_DURATION_S} s!")
         return 1
 
+    i_hi = abs(args.current)
+    i_lo = abs(args.current_low) if args.current_low is not None else 0.5 * i_hi
+    if i_lo < MIN_CURRENT_A or i_hi - i_lo < 0.3 * i_hi:
+        print(f"Chyba: nizsi prud {i_lo:.3f} A musi byt aspon {MIN_CURRENT_A} A a o viac ako 30 % mensi nez {i_hi:.3f} A.")
+        return 1
+
     print("=" * 68)
     print("           Automaticke meranie konstanty Ka (KD240 Sync)           ")
     print("=" * 68)
     print(f"Backend:           {args.backend}")
-    print(f"Testovaci prud:    {args.current:.3f} A")
+    print(f"Testovacie prudy:  {i_hi:.3f} A a {i_lo:.3f} A (odpocet trenia)")
     print(f"Dlzka pulzu:       {args.duration:.3f} s")
     print(f"Pocet pokusov:     {args.trials}")
     print(f"Bezpecnostny limit: {args.max_rpm:.0f} RPM")
@@ -187,59 +201,70 @@ def main():
     results = []
 
     print("\nSpustam meracie pulzy (motor sa na zlomok sekundy kratko pootoci)...")
-    print(f"{'Pokus':>5} | {'Smer/Prud [A]':>14} | {'Max RPM':>9} | {'Alfa [rad/s^2]':>15} | {'R^2':>6} | {'Ka [rad/s^2/A]':>15}")
-    print("-" * 72)
+    print(f"{'Pokus':>5} | {'Smer/Prud [A]':>14} | {'Max RPM':>9} | {'Alfa [rad/s^2]':>15} | {'R^2':>6} | {'Alfa/I [rad/s^2/A]':>18}")
+    print("-" * 78)
 
     try:
+        n = 0
         for i in range(args.trials):
-            # Striedame smer: +, -, +, -, ...
+            # Striedame smer: +, -, +, -, ... a v kazdom smere oba prudy
             sign = 1.0 if (i % 2 == 0) else -1.0
-            test_i = sign * abs(args.current)
+            for level, mag in (("hi", i_hi), ("lo", i_lo)):
+                n += 1
+                test_i = sign * mag
 
-            samples = run_single_pulse(motor, test_i, args.duration, max_rpm=args.max_rpm)
-            alpha, r2, max_rpm, n_fit = analyze_pulse(samples, test_i, args.duration)
+                samples = run_single_pulse(motor, test_i, args.duration, max_rpm=args.max_rpm)
+                alpha, r2, max_rpm, n_fit = analyze_pulse(samples, test_i, args.duration)
 
-            if alpha <= 0.0 or abs(test_i) <= 1e-6:
-                ka_trial = 0.0
-            else:
-                ka_trial = alpha / abs(test_i)
+                results.append({
+                    "trial": n,
+                    "level": level,
+                    "current": test_i,
+                    "max_rpm": max_rpm,
+                    "alpha": alpha,
+                    "r2": r2,
+                })
 
-            results.append({
-                "trial": i + 1,
-                "current": test_i,
-                "max_rpm": max_rpm,
-                "alpha": alpha,
-                "r2": r2,
-                "ka": ka_trial,
-            })
-
-            print(f"{i + 1:5d} | {test_i:+14.3f} | {max_rpm:9.1f} | {alpha:15.1f} | {r2:6.3f} | {ka_trial:15.1f}")
-            time.sleep(0.3)
+                print(f"{n:5d} | {test_i:+14.3f} | {max_rpm:9.1f} | {alpha:15.1f} | {r2:6.3f} | {alpha / mag:18.1f}")
+                time.sleep(0.3)
 
     finally:
         motor.stop()
         motor.close()
 
-    # Vyhodnotenie
-    valid_kas = [r["ka"] for r in results if r["r2"] >= 0.85 and r["ka"] > 50.0]
+    # Vyhodnotenie: priemer alfa pre kazdu uroven prudu cez oba smery, potom rozdiel
+    alphas = {lvl: [r["alpha"] for r in results if r["level"] == lvl and r["r2"] >= 0.85 and r["alpha"] > 0.0]
+              for lvl in ("hi", "lo")}
 
-    print("=" * 72)
-    if not valid_kas:
-        print("[VAROVANIE] Namerane hodnoty mali nizku kvalitu regresie (R^2 < 0.85).")
+    print("=" * 78)
+    if not alphas["hi"] or not alphas["lo"]:
+        print("[VAROVANIE] Namerane hodnoty mali nizku kvalitu regresie (R^2 < 0.85) aspon pri jednom prude.")
         print("Mozne priciny: motor sa netocil (skontroluj 24V napajanie), alebo bol prud prilis maly.")
-        avg_ka = sum(r["ka"] for r in results) / len(results) if results else 0.0
-        print(f"Hruby priemer Ka: {avg_ka:.1f} rad/s^2/A")
+        print("Ak sa pri nizsom prude motor netoci (suche trenie), zvys --current-low.")
     else:
-        avg_ka = sum(valid_kas) / len(valid_kas)
-        variance = sum((k - avg_ka) ** 2 for k in valid_kas) / len(valid_kas)
-        std_ka = math.sqrt(variance)
+        def mean_sd(v):
+            m = sum(v) / len(v)
+            return m, math.sqrt(sum((x - m) ** 2 for x in v) / len(v))
+
+        a_hi, sd_hi = mean_sd(alphas["hi"])
+        a_lo, sd_lo = mean_sd(alphas["lo"])
+        avg_ka = (a_hi - a_lo) / (i_hi - i_lo)
+        std_ka = math.hypot(sd_hi, sd_lo) / (i_hi - i_lo)
+        ka_single = a_hi / i_hi
+        decel_friction = avg_ka * i_hi - a_hi       # spomalenie od trenia [rad/s^2]
 
         print("VYSLEDOK MERANIA:")
-        print(f"  Pocet platnych merani:  {len(valid_kas)} z {len(results)}")
-        print(f"  Odmerane Ka:            {avg_ka:.1f} +- {std_ka:.1f} rad/s^2/A")
+        print(f"  Platne pulzy:           {len(alphas['hi'])} z {args.trials} pri {i_hi:.3f} A, "
+              f"{len(alphas['lo'])} z {args.trials} pri {i_lo:.3f} A")
+        print(f"  Priemerna alfa:         {a_hi:.1f} rad/s^2 pri {i_hi:.3f} A, {a_lo:.1f} rad/s^2 pri {i_lo:.3f} A")
+        print(f"  Odmerane Ka:            {avg_ka:.1f} +- {std_ka:.1f} rad/s^2/A (rozdielova metoda)")
+        print(f"  Ka z jedneho prudu:     {ka_single:.1f} rad/s^2/A (zahrna trenie, podhodnotene o {(1 - ka_single / avg_ka) * 100.0:.1f} %)")
+        print(f"  Odhad trenia:           {decel_friction:.1f} rad/s^2")
         print(f"  Predvolena hodnota:     2500.0 rad/s^2/A")
         print(f"  Odchylka od modelu:     {((avg_ka - 2500.0) / 2500.0) * 100.0:+.1f} %")
-        print("-" * 72)
+        if avg_ka <= 0.0 or decel_friction < 0.0:
+            print("[VAROVANIE] Zaporne trenie alebo Ka alebo velky rozptyl: vysledok je nespolahlivy, zopakuj meranie.")
+        print("-" * 78)
         print("ODPORUCANY ZAPIS DO KONFIGURACNYCH SUBOROV:")
         print("Tuto hodnotu zapis do config/board1.toml (alebo board2.toml):")
         print()

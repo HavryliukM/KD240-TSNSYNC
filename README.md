@@ -668,7 +668,7 @@ Automaticky (nezaťažený motor, krátke momentové pulzy v oboch smeroch, line
 python3 tools/measure_ka.py --backend sim   # skúška bez dosky
 ```
 
-Nástroj obmedzí prúd na 0,5 A, pulz na 0,8 s a preruší pulz pri 1500 rpm. Meranie zahŕňa trenie, takže Ka vychádza mierne nižšie než skutočná hodnota (v simulácii asi o 9 %). Ručne v dashboarde: Mode Torque, 0.3 A, sleduj sklon rýchlosti:
+Nástroj meria pri dvoch prúdoch (predvolene 0,25 A a 0,125 A, oba smery) a Ka počíta z rozdielu zrýchlení, `Ka = (alfa_hi - alfa_lo) / (I_hi - I_lo)`, takže trenie sa odčíta. Jednoprúdová hodnota `alfa / I` (ktorá trenie obsahuje) sa vypíše na porovnanie; v simulácii je o 9 % nižšia, rozdielová metóda trafí 2500 s odchýlkou menšou než 1 %. Nižší prúd sa nastaví cez `--current-low`, ak sa pri ňom motor netočí. Prúd je obmedzený na 0,5 A, pulz na 0,8 s a preruší sa pri 1500 rpm. Motor musí byť nezaťažený. Ručne v dashboarde: Mode Torque, 0.3 A, sleduj sklon rýchlosti:
 
 ```
 Ka = alfa / I     [rad/s² na 1 A]
