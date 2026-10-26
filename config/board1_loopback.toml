@@ -14,4 +14,4 @@ module = "py_foc_motor_ctrl"
 [sender]
 rate_hz = 200
 initial_rpm = 0
-max_rpm = 500                # prve pokusy opatrne
+max_rpm = 1000               # bezpecnostny limit (povodne 500 pri prvych pokusoch)

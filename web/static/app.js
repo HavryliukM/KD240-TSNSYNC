@@ -257,7 +257,9 @@ document.addEventListener('DOMContentLoaded', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ rpm }),
-    });
+    }).then((res) => (res.ok ? null : res.json())).then((err) => {
+      if (err && err.error) alert(`Otáčky neboli nastavené: ${err.error}`);
+    }).catch(() => {});
   }
 
   // Real-time Polling Loop

@@ -843,7 +843,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(resp)))
         self.end_headers()
-        self.wfile.write(resp)
+        try:
+            self.wfile.write(resp)
+        except (ConnectionAbortedError, BrokenPipeError, ConnectionResetError):
+            # Client closed the connection, ignore it
+            pass
 
     def _send_csv(self):
         if not self.manager:
@@ -860,7 +864,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self.send_header("Content-Disposition", 'attachment; filename="tsn_timing_log.csv"')
         self.send_header("Content-Length", str(len(csv_bytes)))
         self.end_headers()
-        self.wfile.write(csv_bytes)
+        try:
+            self.wfile.write(csv_bytes)
+        except (ConnectionAbortedError, BrokenPipeError, ConnectionResetError):
+            # Client closed the connection, ignore it
+            pass
 
     def log_message(self, format, *args):
         # Potlacenie floodovania konzoly pre /api/status polling

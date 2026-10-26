@@ -661,7 +661,14 @@ Výstup: RMS chyba, maximum, percentily, vek paketu, oneskorenie, rozsah výstup
 
 ### 1. Zistenie zosilnenia momentu
 
-V dashboarde: Mode Torque, 0.3 A, sleduj sklon rýchlosti:
+Automaticky (nezaťažený motor, krátke momentové pulzy v oboch smeroch, lineárna regresia rýchlosti):
+
+```bash
+./scripts/run_measure_ka.sh                 # reálny motor (sudo)
+python3 tools/measure_ka.py --backend sim   # skúška bez dosky
+```
+
+Nástroj obmedzí prúd na 0,5 A, pulz na 0,8 s a preruší pulz pri 1500 rpm. Meranie zahŕňa trenie, takže Ka vychádza mierne nižšie než skutočná hodnota (v simulácii asi o 9 %). Ručne v dashboarde: Mode Torque, 0.3 A, sleduj sklon rýchlosti:
 
 ```
 Ka = alfa / I     [rad/s² na 1 A]
