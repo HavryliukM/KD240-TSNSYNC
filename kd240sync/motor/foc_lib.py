@@ -112,6 +112,16 @@ class FocLibMotor(Motor):
             self._current_mode = target_mode
         self._mc.setTorque(clamped)
 
+    def set_openloop_vq(self, volts: float):
+        """Pokusny open-loop V/f rezim: priame napatie Vq bez rampy momentu (len na diagnostiku)."""
+        if self._mc is None:
+            raise RuntimeError("Motor nie je otvoreny")
+        target_mode = self._lib.MotorOpMode.kModeOpenLoop
+        if self._current_mode != target_mode:
+            self._mc.setOperationMode(target_mode)
+            self._current_mode = target_mode
+        self._mc.setVfParamVq(float(volts))
+
     def debug_read(self) -> dict:
         """Diagnostika z kniznice: nastaveny moment a skutocny prud i_q/i_d (len co kniznica ponuka)."""
         out = {}
