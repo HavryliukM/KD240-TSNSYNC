@@ -24,9 +24,11 @@ mode = "torque_pd"
 log_path = "receiver_log.csv"
 
 [receiver.torque_pd]
-# Krok 1 ladenia (PLAN.md 13.3): kd = 0, ki = 0, kp = 20 % vypocitaneho (0.0237 pre wn = 40 rad/s).
+# Krok 1 ladenia (PLAN.md 13.3): ki = 0, kp = 20 % vypocitaneho (0.0237 pre wn = 40 rad/s).
+# kd = 0 sa neosvedcilo (29. 10. 2026): s nasytenim +-0.1 A sa polohova chyba rozkmitala az na FAULT.
+# kd pre kp = 0.005, Ka = 1177 a tlmenie 0.8: 2 * 0.8 * sqrt(kp_rad * Ka) / Ka / 57.2958 = 0.00044.
 kp_a_per_deg = 0.005
-kd_a_per_dps = 0.0
+kd_a_per_dps = 0.00045
 ki_a_per_deg_s = 0.0
 i_limit_a = 0.05
 torque_limit_a = 0.1         # prve pokusy len 0.1 A, motor volne otacatelny
