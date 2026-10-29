@@ -34,6 +34,7 @@ import time
 # Pridaj koren projektu do sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from kd240sync.angle import Unwrapper
 from kd240sync.config import load
 from kd240sync.motor import create as create_motor
 from kd240sync.motor.base import Motor
@@ -64,6 +65,30 @@ def monitor_loop(motor: Motor, interval_s=0.1):
         print("\nMonitorovanie ukoncene.")
 
 
+def _run_timed(motor: Motor, duration_s: float, label: str, sample_s=0.02, print_s=0.25):
+    """Vzorkuje motor a kazdych print_s vypise novy riadok; uhol sa rozvija (bez skoku 360 -> 0).
+
+    Pri 270 rpm by 100 ms vzorkovanie uz skreslilo uhol, preto sa vzorkuje rychlejsie nez sa vypisuje.
+    """
+    unw = Unwrapper()
+    t0 = time.monotonic()
+    t_print = 0.0
+    theta0 = None
+    while True:
+        st = motor.read()
+        t = time.monotonic() - t0
+        total = unw.update(st.theta_deg)
+        if theta0 is None:
+            theta0 = total
+        if t >= t_print:
+            print(f"{t:5.2f} s | {label} | Otacky: {st.speed_rpm:7.1f} RPM | "
+                  f"Uhol: {st.theta_deg:6.1f}° | Od startu: {total - theta0:+9.1f}°")
+            t_print += print_s
+        if t >= duration_s:
+            break
+        time.sleep(sample_s)
+
+
 def run_speed(motor: Motor, rpm: float, duration_s: float):
     if abs(rpm) > MAX_ALLOWED_RPM:
         print(f"Chyba: Pozadovane otacky {rpm} prekracuju bezpecnostny limit {MAX_ALLOWED_RPM} RPM!")
@@ -71,13 +96,8 @@ def run_speed(motor: Motor, rpm: float, duration_s: float):
 
     print(f"\n[START] Rezim Rychlost: Nastavujem {rpm:.1f} RPM na {duration_s:.1f} s...")
     motor.set_speed_rpm(rpm)
-    t0 = time.monotonic()
     try:
-        while time.monotonic() - t0 < duration_s:
-            st = motor.read()
-            rem = duration_s - (time.monotonic() - t0)
-            print(f"Zostava: {rem:4.1f} s | Ziadana: {rpm:6.0f} RPM | Namerana: {st.speed_rpm:6.1f} RPM | Uhol: {st.theta_deg:6.1f}°", end="\r")
-            time.sleep(0.1)
+        _run_timed(motor, duration_s, f"Ziadana: {rpm:6.0f} RPM")
     except KeyboardInterrupt:
         print("\nPrerusene pouzivatelom (Ctrl+C).")
     finally:
@@ -92,13 +112,8 @@ def run_torque(motor: Motor, amps: float, duration_s: float):
 
     print(f"\n[START] Rezim Moment: Nastavujem {amps:+.3f} A na {duration_s:.1f} s...")
     motor.set_torque_a(amps)
-    t0 = time.monotonic()
     try:
-        while time.monotonic() - t0 < duration_s:
-            st = motor.read()
-            rem = duration_s - (time.monotonic() - t0)
-            print(f"Zostava: {rem:4.1f} s | Moment: {amps:+.3f} A | Otacky: {st.speed_rpm:6.1f} RPM | Uhol: {st.theta_deg:6.1f}°", end="\r")
-            time.sleep(0.1)
+        _run_timed(motor, duration_s, f"Moment: {amps:+.3f} A")
     except KeyboardInterrupt:
         print("\nPrerusene pouzivatelom (Ctrl+C).")
     finally:
