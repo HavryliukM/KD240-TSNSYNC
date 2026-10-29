@@ -1,0 +1,33 @@
+# JEDNA DOSKA, test torque regulatora na skutocnom motore: receiver so SKUTOCNYM motorom sleduje
+# simulovany sender (config/board1_loopback_sim.toml) cez localhost. Motor musi byt nezatazeny.
+[network]
+bind_ip = "127.0.0.1"
+peer_ip = "127.0.0.1"
+port = 5005
+
+[motor]
+backend = "foc_lib"
+[motor.foc_lib]
+module = "py_foc_motor_ctrl"
+config_path = "config/anaheim_torque.config"  # moment startuje z 0 A, rampa knižnice nebrzdi regulator
+
+[safety]
+ka_rad_s2_per_a = 1177       # odmerane 29. 10. 2026, tools/measure_ka.py
+
+[receiver]
+rate_hz = 200
+timeout_ms = 50
+direction = 1                # ak sa motor tociv opacnom smere (kladne rpm), daj -1
+ratio = 1.0
+max_error_deg = 60
+mode = "torque_pd"
+log_path = "receiver_log.csv"
+
+[receiver.torque_pd]
+# Krok 1 ladenia (PLAN.md 13.3): kd = 0, ki = 0, kp = 20 % vypocitaneho (0.0237 pre wn = 40 rad/s).
+kp_a_per_deg = 0.005
+kd_a_per_dps = 0.0
+ki_a_per_deg_s = 0.0
+i_limit_a = 0.05
+torque_limit_a = 0.1         # prve pokusy len 0.1 A, motor volne otacatelny
+slew_a_s = 20

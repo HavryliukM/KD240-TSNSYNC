@@ -11,7 +11,7 @@ module = "py_foc_motor_ctrl"  # py_foc_motor_ctrl (alebo prazdne "" pre autodete
 config_path = "config/anaheim_torque.config"  # moment startuje z 0 A a rampa nebrzdi regulator (relativne k projektu)
 
 [safety]
-ka_rad_s2_per_a = 1192.4     # odmerane 29. 10. 2026 na doske 1 (+- 31, trenie 32 rad/s^2), tools/measure_ka.py
+ka_rad_s2_per_a = 1177       # priemer 5 merani 29. 10. 2026 na doske 1 (1164 az 1192, trenie 22 az 32 rad/s^2), tools/measure_ka.py
 
 [receiver]
 rate_hz = 200
