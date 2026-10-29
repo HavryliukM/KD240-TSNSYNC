@@ -11,7 +11,8 @@ DEFAULTS = {
     },
     "motor": {
         "backend": "sim",         # sim | foc_lib | iio_readonly
-        "foc_lib": {"module": ""},
+        "foc_lib": {"module": "",
+                    "config_path": ""},   # config kniznice AMD (anaheim.config), "" = predvoleny /etc/motor-control/config
         "sim": {"J": 2e-5, "kt": 0.05, "b": 1e-5, "coulomb": 5e-4,
                 "tau_speed": 0.05, "accel_limit_rpm_s": 20000.0,
                 "counts_per_rev": 4096},

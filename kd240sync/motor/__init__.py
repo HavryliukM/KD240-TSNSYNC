@@ -11,5 +11,6 @@ def create(cfg) -> Motor:
     if kind == "iio_readonly":
         return IioReadOnlyMotor()
     if kind == "foc_lib":
-        return FocLibMotor(module=cfg.motor.foc_lib.module)
+        return FocLibMotor(module=cfg.motor.foc_lib.module,
+                           config_path=cfg.motor.foc_lib.get("config_path") or None)
     raise ValueError(f"neznamy motor.backend: {kind}")

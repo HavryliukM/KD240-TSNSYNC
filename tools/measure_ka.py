@@ -131,6 +131,9 @@ def main():
     parser.add_argument("--backend", choices=["foc_lib", "sim"], default="foc_lib",
                         help="Backend motora (default: foc_lib)")
     parser.add_argument("--config", default=None, help="Cesta ku konfiguracnemu TOML suboru")
+    parser.add_argument("--lib-config", default=None,
+                        help="Config kniznice AMD (anaheim.config) s RST_TORQUE=0 a TOR_SP=0; "
+                             "bez neho pulz startuje s momentom 0.3 A a Ka sa neda odmerat")
     parser.add_argument("--current", type=float, default=0.25,
                         help="Velkost testovacieho prudu [A] (default: 0.25 A, max 0.5 A)")
     parser.add_argument("--current-low", type=float, default=None,
@@ -170,6 +173,8 @@ def main():
 
     # Inicializacia motora
     overrides = {"motor": {"backend": args.backend}}
+    if args.lib_config:
+        overrides["motor"]["foc_lib"] = {"config_path": os.path.abspath(args.lib_config)}
     cfg = load(args.config, overrides=overrides)
 
     try:
