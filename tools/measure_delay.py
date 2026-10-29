@@ -116,8 +116,57 @@ def run_reversal(motor, current_a, trials):
         time.sleep(0.5)
 
 
+def run_profile(motor, profile, print_s=0.02):
+    """Prejde zoznam (prud, trvanie) v rezime Torque a vypisuje prikaz, rychlost a prud z kniznice."""
+    dbg = getattr(motor, "debug_read", lambda: {})
+    print(f"\nProfil {profile} (prud [A], trvanie [s]); torque_set a i_q su udaje kniznice")
+    print(f"{'t [ms]':>7} | {'prikaz':>7} | {'poloha':>8} | {'rpm':>7} | {'torque_set':>10} | {'i_q':>7} | {'i_d':>7}")
+    print("-" * 70)
+    motor.stop()
+    time.sleep(0.5)
+    unw = Unwrapper()
+    theta0 = unw.update(motor.read().theta_deg)
+    t0 = time.perf_counter()
+    t_print = 0.0
+    seg_start = 0.0
+    try:
+        for cur, dur in profile:
+            motor.set_torque_a(cur)
+            seg_start_t = time.perf_counter() - t0
+            while time.perf_counter() - t0 - seg_start_t < dur:
+                t = time.perf_counter() - t0
+                st = motor.read()
+                if abs(st.speed_rpm) >= MAX_RPM:
+                    print(f"[STOP] otacky nad {MAX_RPM:.0f} rpm, pokus prerusuje")
+                    return
+                if t >= t_print:
+                    d = dbg()
+                    f = lambda k: f"{d[k]:7.3f}" if k in d else "    -- "
+                    print(f"{t * 1e3:7.0f} | {cur:+7.3f} | {unw.update(st.theta_deg) - theta0:8.1f} | "
+                          f"{st.speed_rpm:7.1f} | {f('torque_set'):>10} | {f('i_q')} | {f('i_d')}")
+                    t_print += print_s
+                else:
+                    unw.update(st.theta_deg)
+                time.sleep(0.001)
+    finally:
+        motor.stop()
+
+
+def parse_profile(text):
+    prof = []
+    for part in text.split(","):
+        c, d = part.split(":")
+        c, d = float(c), float(d)
+        if abs(c) > MAX_CURRENT_A or not 0 < d <= 1.0:
+            raise ValueError(f"neplatny krok profilu {part} (prud max {MAX_CURRENT_A} A, trvanie do 1 s)")
+        prof.append((c, d))
+    return prof
+
+
 def main():
     p = argparse.ArgumentParser(description="Mrtvy cas motora po prikaze momentu")
+    p.add_argument("--profile", default=None,
+                   help="Zoznam krokov prud:trvanie, napr. 0.1:0.15,0:0.15,-0.1:0.3 (v jednom rezime Torque)")
     p.add_argument("--reversal", action="store_true",
                    help="Namiesto skoku z pokoja zmerat prepnutie smeru momentu v rezime Torque")
     p.add_argument("--backend", choices=["foc_lib", "sim"], default="foc_lib")
@@ -137,6 +186,14 @@ def main():
         overrides["motor"]["foc_lib"] = {"config_path": os.path.abspath(args.lib_config)}
     motor = create_motor(load(args.config, overrides=overrides))
     motor.open()
+
+    if args.profile:
+        try:
+            run_profile(motor, parse_profile(args.profile))
+        finally:
+            motor.stop()
+            motor.close()
+        return 0
 
     if args.reversal:
         try:

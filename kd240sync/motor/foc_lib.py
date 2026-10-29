@@ -112,6 +112,23 @@ class FocLibMotor(Motor):
             self._current_mode = target_mode
         self._mc.setTorque(clamped)
 
+    def debug_read(self) -> dict:
+        """Diagnostika z kniznice: nastaveny moment a skutocny prud i_q/i_d (len co kniznica ponuka)."""
+        out = {}
+        if self._mc is None:
+            return out
+        try:
+            out["torque_set"] = float(self._mc.getTorqueSetValue())
+        except Exception:
+            pass
+        try:
+            foc = self._mc.getFocCalc()
+            out["i_q"] = float(foc.i_q)
+            out["i_d"] = float(foc.i_d)
+        except Exception:
+            pass
+        return out
+
     def stop(self):
         """Uvedie motor do bezpecneho volneho stavu (kModeOff)."""
         if self._mc is not None and self._lib is not None:
