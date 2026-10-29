@@ -130,7 +130,9 @@ def run_profile(motor, profile, print_s=0.02):
     t_print = 0.0
     seg_start = 0.0
     try:
-        for cur, dur in profile:
+        for cur, dur, reenter in profile:
+            if reenter:
+                motor.stop()            # Off -> Torque: startovacia cesta, ktora na doske reaguje do 7 ms
             motor.set_torque_a(cur)
             seg_start_t = time.perf_counter() - t0
             while time.perf_counter() - t0 - seg_start_t < dur:
@@ -156,17 +158,19 @@ def parse_profile(text):
     prof = []
     for part in text.split(","):
         c, d = part.split(":")
-        c, d = float(c), float(d)
+        reenter = c.endswith("!")       # "-0.1!:0.3" = pred krokom vypnut a znova zapnut rezim
+        c, d = float(c.rstrip("!")), float(d)
         if abs(c) > MAX_CURRENT_A or not 0 < d <= 1.0:
             raise ValueError(f"neplatny krok profilu {part} (prud max {MAX_CURRENT_A} A, trvanie do 1 s)")
-        prof.append((c, d))
+        prof.append((c, d, reenter))
     return prof
 
 
 def main():
     p = argparse.ArgumentParser(description="Mrtvy cas motora po prikaze momentu")
     p.add_argument("--profile", default=None,
-                   help="Zoznam krokov prud:trvanie, napr. 0.1:0.15,0:0.15,-0.1:0.3 (v jednom rezime Torque)")
+                   help="Zoznam krokov prud:trvanie, napr. 0.1:0.15,0:0.15,-0.1:0.3 (v jednom rezime Torque); "
+                        "'!' za prudom (-0.1!:0.3) pred krokom vypne a znova zapne rezim")
     p.add_argument("--reversal", action="store_true",
                    help="Namiesto skoku z pokoja zmerat prepnutie smeru momentu v rezime Torque")
     p.add_argument("--backend", choices=["foc_lib", "sim"], default="foc_lib")
