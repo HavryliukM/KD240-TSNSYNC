@@ -12,5 +12,5 @@ backend = "sim"
 [sender]
 rate_hz = 200
 initial_rpm = 0
-max_rpm = 300                # pri prvych pokusoch len 300, zvysuj postupne
+max_rpm = 200                # pri torque_limit_a = 0.1 A motor ustali asi 270 rpm (trenie rastie s rychlostou); zvysuj spolu s limitom
 ramp_rpm_s = 200             # pomala rampa ziadanej rychlosti pre prve pokusy
