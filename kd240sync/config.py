@@ -23,6 +23,9 @@ DEFAULTS = {
         "ka_rad_s2_per_a": 2500.0,
         "ka_lo": 0.5,             # zosilnenia musia byt stabilne pre Ka v [lo, hi] * Ka
         "ka_hi": 2.0,
+        # Napatovy rezim (voltage_pd): Ka_v = Kv / tau = 47 rad/s na V / 0.06 s (namerane na doske 29. 10. 2026);
+        # pri overeni stability sa ignoruje vlastne tlmenie motora, takze je to konzervativne.
+        "ka_v_rad_s2_per_v": 783.0,
         "tau_i_s": 0.002,         # odhad casovej konstanty prudovej slucky
         "max_torque_a": 2.0,      # tvrdy strop limitu momentu, ktory sa da nastavit
         "max_slew_a_s": 1000.0,
@@ -57,7 +60,7 @@ DEFAULTS = {
         "direction": 1,           # +1 rovnaky smer, -1 opacny
         "ratio": 1.0,             # prevod (elektronicky prevod)
         "max_error_deg": 90.0,    # nad touto chybou -> FAULT a motor sa uvolni
-        "mode": "torque_pd",      # torque_pd | speed_p
+        "mode": "torque_pd",      # torque_pd | voltage_pd | speed_p (na doske pouzi voltage_pd, pozri IMPROVMENTS.md)
         "spin_us": 0,
         "log_path": "",
         "status_period_s": 1.0,
@@ -68,6 +71,12 @@ DEFAULTS = {
                       "ki_a_per_deg_s": 0.02, "i_limit_a": 0.15,
                       "deadband_deg": 0.1,      # ~1 impulz enkodera; 0 = vypnute
                       "torque_limit_a": 1.5, "slew_a_s": 500.0},
+        # Vystup v voltoch (open-loop Vq). Zosilnenia z modelu motora 29. 10. 2026 (Kv = 47 rad/s na V,
+        # tau = 0.06 s, mrtve pasmo 0.09 V): wn = 25 rad/s, tlmenie 0.8. kff = 1 / (Kv v deg/s na V).
+        "voltage_pd": {"kp_v_per_deg": 0.014, "kd_v_per_dps": 0.0005,
+                       "ki_v_per_deg_s": 0.05, "kff_v_per_dps": 0.00037,
+                       "i_limit_v": 0.3, "deadband_deg": 0.1,
+                       "voltage_limit_v": 1.0, "slew_v_s": 100.0},
         "speed_p": {"kp_rpm_per_deg": 5.0, "max_rpm": 1500.0},
     },
 }

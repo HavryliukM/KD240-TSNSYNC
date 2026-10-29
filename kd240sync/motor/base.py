@@ -28,6 +28,10 @@ class Motor(ABC):
     @abstractmethod
     def set_torque_a(self, amps: float): ...
 
+    def set_voltage_v(self, volts: float):
+        """Priame napatie Vq (open-loop V/f). Nie je to povinne pre kazdy backend."""
+        raise NotImplementedError(f"backend {self.name} nepodporuje napatovy rezim")
+
     @abstractmethod
     def stop(self):
         """Bezpecny stav: nulovy moment, motor sa uvolni (rezim Off)."""

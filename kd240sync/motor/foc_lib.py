@@ -25,6 +25,7 @@ log = logging.getLogger(__name__)
 LIB_DIR = "/opt/xilinx/xlnx-app-kd240-foc-motor-ctrl/lib"
 CANDIDATE_MODULES = ("py_foc_motor_ctrl", "py_motor_control")
 MAX_TORQUE_A = 2.5
+MAX_VOLTAGE_V = 1.5
 
 
 class FocLibMotor(Motor):
@@ -113,7 +114,8 @@ class FocLibMotor(Motor):
         self._mc.setTorque(clamped)
 
     def set_openloop_vq(self, volts: float):
-        """Pokusny open-loop V/f rezim: priame napatie Vq bez rampy momentu (len na diagnostiku)."""
+        """Open-loop V/f rezim: priame napatie Vq. Na rozdiel od kModeTorque sa nemeni v tikoch po 0.5 s
+        (namerane 29. 10. 2026), reaguje do desiatok ms. Prudovy limit tu kniznica nema."""
         if self._mc is None:
             raise RuntimeError("Motor nie je otvoreny")
         target_mode = self._lib.MotorOpMode.kModeOpenLoop
@@ -121,6 +123,10 @@ class FocLibMotor(Motor):
             self._mc.setOperationMode(target_mode)
             self._current_mode = target_mode
         self._mc.setVfParamVq(float(volts))
+
+    def set_voltage_v(self, volts: float):
+        # tvrdy strop pre prípad chyby v regulatore; stojaci motor odoberie asi 0.33 A na 1 V
+        self.set_openloop_vq(max(-MAX_VOLTAGE_V, min(MAX_VOLTAGE_V, float(volts))))
 
     def debug_read(self) -> dict:
         """Diagnostika z kniznice: nastaveny moment a skutocny prud i_q/i_d (len co kniznica ponuka)."""

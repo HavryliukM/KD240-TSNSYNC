@@ -8,6 +8,7 @@ import time
 from . import protocol
 from .angle import Unwrapper
 from . import safety
+from .config import Cfg
 from .controller import SpeedP, TorquePD
 from .timing import PeriodicLoop
 
@@ -80,6 +81,20 @@ def make_controller(rc, sc=None):
             for w in warns:
                 print(f"[safety] {w}", flush=True)
         return TorquePD(kp, kd, ki, limit, slew, t.i_limit_a, t.deadband_deg)
+    if rc.mode == "voltage_pd":
+        v = rc.voltage_pd
+        kp, kd, ki = v.kp_v_per_deg, v.kd_v_per_dps, v.ki_v_per_deg_s
+        limit, slew = v.voltage_limit_v, v.slew_v_s
+        if sc is not None:
+            # rovnake overenie stability, len s modelom Ka_v [rad/s^2 na V] namiesto Ka [rad/s^2 na A]
+            sv = Cfg(dict(sc))
+            sv["ka_rad_s2_per_a"] = float(sc.ka_v_rad_s2_per_v)
+            r, warns = safety.clamp_gains(kp, kd, ki, limit, slew, rc.max_error_deg,
+                                          1.0 / float(rc.rate_hz), sv)
+            kp, kd, ki, limit, slew = r["kp"], r["kd"], r["ki"], r["torque_limit_a"], r["slew_a_s"]
+            for w in warns:
+                print(f"[safety] {w}", flush=True)
+        return TorquePD(kp, kd, ki, limit, slew, v.i_limit_v, v.deadband_deg, kff=v.kff_v_per_dps)
     if rc.mode == "speed_p":
         s = rc.speed_p
         return SpeedP(s.kp_rpm_per_deg, s.max_rpm)
@@ -97,7 +112,8 @@ def run(cfg, motor, sock, stop_event, quiet=False) -> dict:
     ctrl = make_controller(rc, cfg.safety)
     sup = safety.Supervisor(cfg.safety, period, max_err,
                             float(cfg.sender.max_rpm) * float(cfg.safety.overspeed_factor))
-    torque_mode = rc.mode == "torque_pd"
+    voltage_mode = rc.mode == "voltage_pd"
+    torque_mode = rc.mode == "torque_pd" or voltage_mode     # PD regulator s vystupom v A alebo vo V
     unw = Unwrapper()
     loop = PeriodicLoop(period, float(rc.spin_us) / 1e6)
     rx = RxThread(sock, stop_event)
@@ -148,7 +164,7 @@ def run(cfg, motor, sock, stop_event, quiet=False) -> dict:
             w_ref = sign * ratio * pkt.omega_rpm * 6.0
             err = ref - local
             if torque_mode:
-                out = ctrl.update(err, w_ref - ms.speed_rpm * 6.0, dt)
+                out = ctrl.update(err, w_ref - ms.speed_rpm * 6.0, dt, w_ref)
             else:
                 out = ctrl.update(err, w_ref, dt)
             reason = sup.check(now / 1e9, err, out, getattr(ctrl, "limit", 0.0), ms.speed_rpm)
@@ -159,7 +175,9 @@ def run(cfg, motor, sock, stop_event, quiet=False) -> dict:
                 if not quiet:
                     print(f"[receiver] FAULT: {fault_reason}", flush=True)
                 continue
-            if torque_mode:
+            if voltage_mode:
+                motor.set_voltage_v(out)
+            elif torque_mode:
                 motor.set_torque_a(out)
             else:
                 motor.set_speed_rpm(out)

@@ -16,7 +16,12 @@ class SimMotor(Motor):
 
     def __init__(self, J=2e-5, kt=0.05, b=1e-5, coulomb=5e-4, tau_speed=0.05,
                  accel_limit_rpm_s=20000.0, counts_per_rev=4096,
-                 initial_theta_deg=0.0, clock=time.monotonic_ns):
+                 initial_theta_deg=0.0, clock=time.monotonic_ns,
+                 kv_rad_s_per_v=47.0, tau_v=0.06, v_dead=0.09):
+        # rezim 'voltage' je prvy rad podla merania na doske 29. 10. 2026:
+        # ustalene otacky = kv*(|V| - v_dead), casova konstanta tau_v
+        self.kv, self.tau_v, self.v_dead = kv_rad_s_per_v, tau_v, v_dead
+        self.v_set = 0.0
         self.J, self.kt, self.b, self.coulomb = J, kt, b, coulomb
         self.tau_speed = tau_speed
         self.acc_lim = accel_limit_rpm_s * 2 * math.pi / 60.0
@@ -43,6 +48,10 @@ class SimMotor(Motor):
                 dw = (self.omega_set - self.omega) / self.tau_speed
                 dw = max(-self.acc_lim, min(self.acc_lim, dw))
                 self.omega += dw * h
+            elif self.mode == "voltage":
+                eff = max(0.0, abs(self.v_set) - self.v_dead)
+                target = math.copysign(self.kv * eff, self.v_set)
+                self.omega += (target - self.omega) / self.tau_v * h
             else:
                 tq = self.kt * self.i_set if self.mode == "torque" else 0.0
                 fr = self.b * self.omega + self.coulomb * math.tanh(self.omega / 0.5)
@@ -69,11 +78,18 @@ class SimMotor(Motor):
             self.mode = "torque"
             self.i_set = float(amps)
 
+    def set_voltage_v(self, volts):
+        with self._lock:
+            self._advance()
+            self.mode = "voltage"
+            self.v_set = float(volts)
+
     def stop(self):
         with self._lock:
             self._advance()
             self.mode = "off"
             self.i_set = 0.0
+            self.v_set = 0.0
             self.omega_set = 0.0
 
     def turn_by_hand(self, deg):

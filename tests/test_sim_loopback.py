@@ -17,6 +17,13 @@ class LoopbackTests(unittest.TestCase):
         self.assertLess(r["lost"], 5)
         self.assertLess(r["err_rms_deg"], 6.0)
 
+    def test_voltage_mode_tracking_in_simulation(self):
+        s = run_demo(duration_s=8.0, overrides={"receiver": {"mode": "voltage_pd"}})
+        r = s["receiver"]
+        self.assertEqual(r["fault"], "")
+        self.assertEqual(r["state"], "RUN")
+        self.assertLess(r["err_rms_deg"], 8.0)
+
     def test_opposite_direction(self):
         s = run_demo(duration_s=6.0, overrides={"receiver": {"direction": -1}})
         r = s["receiver"]

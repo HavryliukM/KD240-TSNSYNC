@@ -8,11 +8,14 @@ def _clamp(x, lo, hi):
 class TorquePD:
     """Polohovy PD(I) regulator s vystupom = moment (prud v A).
 
-    u = kp*e + kd*(w_ref - w) + integral(ki*e), s limitom a obmedzenim rychlosti zmeny.
+    u = kp*e + kd*(w_ref - w) + kff*w_ref + integral(ki*e), s limitom a obmedzenim rychlosti zmeny.
+
+    Rovnaka trieda sluzi aj pre napatovy rezim (voltage_pd): jednotky vystupu su potom volty.
     """
 
-    def __init__(self, kp, kd, ki=0.0, limit_a=0.3, slew_a_s=50.0, i_limit_a=0.05, deadband_deg=0.0):
-        self.kp, self.kd, self.ki = kp, kd, ki
+    def __init__(self, kp, kd, ki=0.0, limit_a=0.3, slew_a_s=50.0, i_limit_a=0.05, deadband_deg=0.0,
+                 kff=0.0):
+        self.kp, self.kd, self.ki, self.kff = kp, kd, ki, kff
         self.deadband = float(deadband_deg)
         self.limit, self.slew, self.i_limit = limit_a, slew_a_s, i_limit_a
         self.reset()
@@ -21,7 +24,7 @@ class TorquePD:
         self.integ = 0.0
         self.out = 0.0
 
-    def update(self, e_deg, w_err_dps, dt):
+    def update(self, e_deg, w_err_dps, dt, w_ref_dps=0.0):
         # mala mrtva zona okolo nuly: kvantovanie enkodera by inak v kluzi vyrabalo
         # trvale mikro-kmity momentu (motor sa 'chvie' na -0.1 rpm)
         e_raw = e_deg
@@ -29,7 +32,7 @@ class TorquePD:
             e_deg -= max(-self.deadband, min(self.deadband, e_deg))
             if e_deg == 0.0 and abs(w_err_dps) < 1.0:
                 w_err_dps = 0.0
-        u = self.kp * e_deg + self.kd * w_err_dps
+        u = self.kp * e_deg + self.kd * w_err_dps + self.kff * w_ref_dps
         if self.ki:
             # integrator pracuje s nezmensenou chybou: P-clen v mrtvej zone je prilis slaby
             # na prekonanie trenia, a prave integrator musi zvysnu odchylku dotiahnut na nulu

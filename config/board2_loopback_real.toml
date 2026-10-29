@@ -20,8 +20,19 @@ timeout_ms = 50
 direction = 1                # ak sa motor tociv opacnom smere (kladne rpm), daj -1
 ratio = 1.0
 max_error_deg = 60
-mode = "torque_pd"
+mode = "voltage_pd"          # kModeTorque tika po 0.5 s a nejde na polohovu regulaciu, pozri IMPROVMENTS.md
 log_path = "receiver_log.csv"
+
+[receiver.voltage_pd]
+# Zosilnenia z namerane modelu motora (29. 10. 2026). Vystup je napatie [V]. Pre sender max 200 rpm
+# treba asi 0.53 V (200 rpm / 450 rpm na V + 0.09 V mrtve pasmo), limit 0.8 V necha rezervu.
+kp_v_per_deg = 0.014
+kd_v_per_dps = 0.0005
+ki_v_per_deg_s = 0.05
+kff_v_per_dps = 0.00037
+i_limit_v = 0.3
+voltage_limit_v = 0.8
+slew_v_s = 100
 
 [receiver.torque_pd]
 # Krok 1 ladenia (PLAN.md 13.3): ki = 0, kp = 20 % vypocitaneho (0.0237 pre wn = 40 rad/s).
