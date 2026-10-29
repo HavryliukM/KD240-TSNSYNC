@@ -57,8 +57,69 @@ def one_trial(motor, current_a, duration_s):
     return samples
 
 
+def reversal_trial(motor, current_a, run_s, after_s):
+    """+I po dobu run_s, potom BEZ vypnutia rezimu -I (tak meni moment receiver). Vrati (t_switch, samples)."""
+    motor.stop()
+    time.sleep(0.5)
+    unw = Unwrapper()
+    theta0 = unw.update(motor.read().theta_deg)
+    samples = []
+    t0 = time.perf_counter()
+    motor.set_torque_a(current_a)
+    t_switch = None
+    try:
+        while True:
+            t = time.perf_counter() - t0
+            st = motor.read()
+            samples.append((t, unw.update(st.theta_deg) - theta0, st.speed_rpm))
+            if t_switch is None and t >= run_s:
+                motor.set_torque_a(-current_a)
+                t_switch = t
+            if abs(st.speed_rpm) >= MAX_RPM or (t_switch is not None and t - t_switch >= after_s):
+                break
+            time.sleep(0.001)
+    finally:
+        motor.stop()
+    return t_switch, samples
+
+
+def run_reversal(motor, current_a, trials):
+    print(f"\nPrepnutie smeru {current_a:+.3f} A -> {-current_a:+.3f} A bez vypnutia rezimu (ako v receiveri)")
+    print(f"{'Pokus':>5} | {'v. pri prepnuti':>16} | {'zrychlenie obratene po':>22}")
+    print("-" * 52)
+    for i in range(trials):
+        sg = 1.0 if i % 2 == 0 else -1.0
+        t_sw, s = reversal_trial(motor, sg * current_a, 0.12, 0.30)
+        if t_sw is None:
+            print(f"{i + 1:5d} | pulz sa skoncil pred prepnutim (otacky nad {MAX_RPM:.0f} rpm)")
+            continue
+        sw = [x for x in s if x[0] >= t_sw]
+        v_sw = sg * sw[0][2]
+        t_rev = None
+        for k in range(len(sw)):
+            j = k
+            while j > 0 and sw[k][0] - sw[j][0] < 0.010:
+                j -= 1
+            dt = sw[k][0] - sw[j][0]
+            if dt >= 0.008 and sg * (sw[k][2] - sw[j][2]) / dt < 0.0:
+                t_rev = sw[k][0] - t_sw
+                break
+        txt = f"{t_rev * 1e3:6.0f} ms" if t_rev is not None else "   nikdy"
+        print(f"{i + 1:5d} | {v_sw:9.0f} rpm | {txt:>22}")
+        if i == 0:
+            print("      priebeh 1. pokusu po prepnuti (t od prepnutia [ms], poloha [deg], rpm), ~10 ms:")
+            last = -1.0
+            for t, th, rpm in sw:
+                if t - t_sw - last >= 0.010 or last < 0:
+                    print(f"        {(t - t_sw) * 1e3:6.0f}  {th:8.1f}  {rpm:7.1f}")
+                    last = t - t_sw
+        time.sleep(0.5)
+
+
 def main():
     p = argparse.ArgumentParser(description="Mrtvy cas motora po prikaze momentu")
+    p.add_argument("--reversal", action="store_true",
+                   help="Namiesto skoku z pokoja zmerat prepnutie smeru momentu v rezime Torque")
     p.add_argument("--backend", choices=["foc_lib", "sim"], default="foc_lib")
     p.add_argument("--config", default=None)
     p.add_argument("--lib-config", default=None, help="Config kniznice AMD (anaheim_torque.config)")
@@ -76,6 +137,14 @@ def main():
         overrides["motor"]["foc_lib"] = {"config_path": os.path.abspath(args.lib_config)}
     motor = create_motor(load(args.config, overrides=overrides))
     motor.open()
+
+    if args.reversal:
+        try:
+            run_reversal(motor, abs(args.current), args.trials)
+        finally:
+            motor.stop()
+            motor.close()
+        return 0
 
     print(f"Skok {args.current:+.3f} A z pokoja, {args.trials} pokusov (striedaju sa smery)")
     print(f"{'Pokus':>5} | {'Prud':>7} | {'t_theta':>8} | {'t_speed':>8} | {'t_dtheta':>8} | {'periodu vzorky':>14}")
