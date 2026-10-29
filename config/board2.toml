@@ -19,11 +19,23 @@ timeout_ms = 50
 direction = 1                # ak sa motor 2 tociv opacnom smere, daj -1 (najprv s malym momentom!)
 ratio = 1.0
 max_error_deg = 60
-mode = "torque_pd"
+mode = "voltage_pd"          # kModeTorque tika po 0.5 s a nejde na polohovu regulaciu, pozri IMPROVMENTS.md
 log_path = "receiver_log.csv"
 
+[receiver.voltage_pd]
+# Odladene na doske 29. 10. 2026 (loopback, sender 50 / 100 / -100 rpm): RMS chyby 1.29 deg, max 9.1 deg.
+# Vystup je napatie [V]; ustalene otacky su asi 450 rpm na V nad mrtvym pasmom 0.09 V, teda limit
+# 1.0 V staci na asi 400 rpm. Pre rychlejsi sender zvys voltage_limit_v (stojaci motor odoberie asi 0.33 A na 1 V).
+kp_v_per_deg = 0.028
+kd_v_per_dps = 0.0010
+ki_v_per_deg_s = 0.05
+kff_v_per_dps = 0.00037
+i_limit_v = 0.3
+voltage_limit_v = 1.0
+slew_v_s = 100
+
 [receiver.torque_pd]
-# Startovacie hodnoty zo SIMULACIE, nie z realneho motora. Treba odladit.
+# Nepouziva sa (mode = "voltage_pd"). Startovacie hodnoty zo SIMULACIE, nie z realneho motora.
 kp_a_per_deg = 0.011
 kd_a_per_dps = 0.00045
 ki_a_per_deg_s = 0.0

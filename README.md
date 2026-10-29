@@ -609,9 +609,16 @@ timeout_ms = 50              # výpadok paketov → motor sa uvoľní
 direction = 1                # +1 rovnaký smer, -1 opačný
 ratio = 1.0                  # elektronický prevod
 max_error_deg = 60           # nad touto chybou → FAULT
-mode = "torque_pd"           # torque_pd | speed_p
+mode = "voltage_pd"          # voltage_pd (na doske) | torque_pd | speed_p
 
-[receiver.torque_pd]
+[receiver.voltage_pd]        # výstup regulátora je napätie [V] (open-loop Vq knižnice AMD), odladené na doske
+kp_v_per_deg = 0.028
+kd_v_per_dps = 0.0010
+ki_v_per_deg_s = 0.05
+kff_v_per_dps = 0.00037      # priama väzba na žiadanú rýchlosť
+voltage_limit_v = 1.0        # asi 450 rpm na V nad mŕtvym pásmom 0.09 V; stojaci motor odoberie asi 0.33 A na 1 V
+
+[receiver.torque_pd]         # na doske nepoužiteľné: kModeTorque knižnice AMD uplatní zmenu momentu len každých 0.5 s
 kp_a_per_deg = 0.011         # proporcionálny člen
 kd_a_per_dps = 0.00045       # derivačný člen
 ki_a_per_deg_s = 0.0         # integrálny člen
@@ -675,6 +682,16 @@ Ka = alfa / I     [rad/s² na 1 A]
 ```
 
 V simulácii: `Ka ≈ 2500`. Nameranú hodnotu zapíš do `[safety] ka_rad_s2_per_a`, overenie stability zosilnení sa podľa nej prepočíta.
+
+> [!IMPORTANT]
+> **Na doske merať s `--lib-config config/anaheim_torque.config`.** Predvolený config knižnice AMD (`anaheim.config`) štartuje režim Torque s momentom 0,3 A (`RST_TORQUE`, `TOR_SP`) a mení ho rampou len 0,05 A za tik. Bez tohto prepínača vychádza `Ka` nezmyselné (aj záporné). Naša kópia má `RST_TORQUE=0`, `TOR_SP=0`, `TORQUE_RRATE=50`:
+> ```bash
+> ./scripts/run_measure_ka.sh --lib-config config/anaheim_torque.config
+> ```
+> Nameraná hodnota na doske 1: **Ka ≈ 1177 rad/s² na A** (5 meraní, rozptyl asi 1 %).
+
+> [!WARNING]
+> **Režim Torque knižnice AMD sa pre riadenie polohy nehodí.** Zmenu momentu v ňom uplatní len každých asi 0,5 s (namerané cez skutočný prúd `i_q` v `tools/measure_delay.py`), takže po zmene znamienka motor pol sekundy zrýchľuje ďalej a regulátor sa rozkmitá. Receiver preto používa `mode = "voltage_pd"` (open-loop napätie Vq), ktoré reaguje do desiatok ms. Diagnostika: `./scripts/run_measure_delay.sh --lib-config config/anaheim_torque.config --profile=0.1:0.15,-0.1:0.3` (príklady krokov: `0.1:0.15` moment [A], `v100:0.3` rýchlosť [rpm], `q0.5:0.3` napätie [V]).
 
 ### 2. Výpočet zosilnení
 

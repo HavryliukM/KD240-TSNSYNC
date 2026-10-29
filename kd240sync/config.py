@@ -71,9 +71,10 @@ DEFAULTS = {
                       "ki_a_per_deg_s": 0.02, "i_limit_a": 0.15,
                       "deadband_deg": 0.1,      # ~1 impulz enkodera; 0 = vypnute
                       "torque_limit_a": 1.5, "slew_a_s": 500.0},
-        # Vystup v voltoch (open-loop Vq). Zosilnenia z modelu motora 29. 10. 2026 (Kv = 47 rad/s na V,
-        # tau = 0.06 s, mrtve pasmo 0.09 V): wn = 25 rad/s, tlmenie 0.8. kff = 1 / (Kv v deg/s na V).
-        "voltage_pd": {"kp_v_per_deg": 0.014, "kd_v_per_dps": 0.0005,
+        # Vystup v voltoch (open-loop Vq). Pociatocne zosilnenia z modelu motora 29. 10. 2026 (Kv = 47 rad/s
+        # na V, tau = 0.06 s, mrtve pasmo 0.09 V): wn = 25 rad/s, tlmenie 0.8 (kp 0.014, kd 0.0005); odladene
+        # na skutocnom motore na kp 0.028, kd 0.0010. kff = 1 / (Kv v deg/s na V).
+        "voltage_pd": {"kp_v_per_deg": 0.028, "kd_v_per_dps": 0.0010,
                        "ki_v_per_deg_s": 0.05, "kff_v_per_dps": 0.00037,
                        "i_limit_v": 0.3, "deadband_deg": 0.1,
                        "voltage_limit_v": 1.0, "slew_v_s": 100.0},

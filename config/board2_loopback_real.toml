@@ -26,8 +26,8 @@ log_path = "receiver_log.csv"
 [receiver.voltage_pd]
 # Zosilnenia z namerane modelu motora (29. 10. 2026). Vystup je napatie [V]. Pre sender max 200 rpm
 # treba asi 0.53 V (200 rpm / 450 rpm na V + 0.09 V mrtve pasmo), limit 0.8 V necha rezervu.
-kp_v_per_deg = 0.014
-kd_v_per_dps = 0.0005
+kp_v_per_deg = 0.028         # odladene 29. 10. 2026: 0.014/0.0005 -> RMS 2.69 deg, 0.020/0.0007 -> 1.91, 0.028/0.0010 -> 1.29
+kd_v_per_dps = 0.0010
 ki_v_per_deg_s = 0.05
 kff_v_per_dps = 0.00037
 i_limit_v = 0.3
