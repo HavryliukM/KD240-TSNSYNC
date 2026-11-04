@@ -691,6 +691,18 @@ Opakované merania a rýchlosť obnovovania knižnice:
 python tools/update_rate.py rate2k.csv
 ```
 
+### Skoková odozva rýchlosti (režim Speed knižnice AMD)
+
+```bash
+./scripts/run_speed_test.sh --steps 300:2,600:2,0:1.5 --rt --out spd.csv
+python tools/plot_step_response.py spd.csv          # na PC: metriky + graf rýchlosti a prúdu
+```
+
+Regulátor rýchlosti je v knižnici (`SPEED_KP`, `SPEED_KI`, rampa `SPEED_RRATE` v `config/anaheim_torque.config`).
+CSV obsahuje `t_s, ref_rpm, speed_rpm, theta_deg, raw_deg, i_q, i_d, torque_set, read_us, dbg_us`. Časové metriky
+sa počítajú z rýchlosti vyhladenej kĺzavým priemerom 5 ms (odhad v knižnici šumí), zvlnenie zo surovej rýchlosti.
+Strop rýchlosti je predvolene 1,25 × najvyššia rýchlosť profilu + 100 ot/min.
+
 > 4. 11. 2026 pri 2 kHz a ~300 ot/min: rýchlosť z knižnice sa mení v 86 % vzoriek, poloha každých 0,5 až 1 ms
 > (rozlíšenie 1°), takže perióda 0,5 ms prináša nové údaje. Jitter priemer 23 µs, max 323 µs, 1 vynechaný cyklus
 > zo 7 000.

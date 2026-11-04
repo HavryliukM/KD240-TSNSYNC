@@ -1,4 +1,6 @@
-"""Metriky prechodovej charakteristiky polohoveho servopohonu z CSV nastroja tools/test_position_step.py.
+"""Metriky prechodovej charakteristiky servopohonu z CSV nastrojov tools/test_position_step.py (poloha, deg)
+a tools/test_speed_step.py (rychlost, ot/min; analyze(..., ref_key="ref_rpm", y_key="speed_rpm")).
+Kluce vysledku maju priponu _deg z polohoveho testu, jednotky su vsak jednotky meranej veliciny.
 
 Len standardna kniznica (bezi na doske aj na PC). Profil sa rozdeli na useky: kazdy usek zacina prvou
 vzorkou, v ktorej sa ziadana poloha zmeni (skok alebo zaciatok rampy), a konci pred dalsou takou zmenou.
@@ -67,11 +69,13 @@ def step_metrics(t, ref, theta, s, e, band_pct=5.0, band_min_deg=1.0, ess_window
     out["settle_s"] = settle
     tail = [theta[i] - target for i in range(s, e) if t[i] >= t[e - 1] - ess_window_s]
     out["ess_deg"] = sum(tail) / len(tail)
+    mean = out["ess_deg"]
+    out["ripple_std"] = math.sqrt(sum((x - mean) ** 2 for x in tail) / len(tail))   # zvlnenie v ustalenom stave
     err = [ref[i] - theta[i] for i in range(s, e)]
     out["err_rms_deg"] = math.sqrt(sum(x * x for x in err) / len(err))
     return out
 
 
-def analyze(data, band_pct=5.0, band_min_deg=1.0):
-    t, ref, th = data["t_s"], data["ref_deg"], data["theta_deg"]
-    return [step_metrics(t, ref, th, s, e, band_pct, band_min_deg) for s, e in segments(t, ref)]
+def analyze(data, band_pct=5.0, band_min_deg=1.0, ref_key="ref_deg", y_key="theta_deg", ess_window_s=0.2):
+    t, ref, y = data["t_s"], data[ref_key], data[y_key]
+    return [step_metrics(t, ref, y, s, e, band_pct, band_min_deg, ess_window_s) for s, e in segments(t, ref)]
