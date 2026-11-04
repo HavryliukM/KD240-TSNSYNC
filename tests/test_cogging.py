@@ -74,6 +74,23 @@ class CoggingTests(unittest.TestCase):
         self.assertEqual(comp["fault"], "")
         self.assertLess(moving_rms(comp["data"]), 0.5 * moving_rms(base["data"]))
 
+    def test_receiver_loop_with_compensation_from_config(self):
+        from kd240sync.demo import run_demo
+        table = os.path.join(os.path.dirname(__file__), "..", "config", "cogging_board2.csv")
+        vp = {"kfc_v": 0.11, "cogging_table": os.path.abspath(table)}
+        r = run_demo(duration_s=6.0, overrides={"receiver": {"mode": "voltage_pd", "voltage_pd": vp}})["receiver"]
+        self.assertEqual(r["fault"], "")
+        self.assertEqual(r["state"], "RUN")
+        self.assertLess(r["err_rms_deg"], 8.0)
+
+    def test_board_configs_enable_compensation(self):
+        base = os.path.join(os.path.dirname(__file__), "..", "config")
+        for name in ("board2.toml", "board2_loopback_real.toml"):
+            cfg = config.load(os.path.join(base, name))
+            vp = cfg.receiver.voltage_pd
+            self.assertEqual(vp.kfc_v, 0.11)
+            self.assertTrue(os.path.exists(os.path.join(base, "..", vp.cogging_table)), name)
+
 
 if __name__ == "__main__":
     unittest.main()

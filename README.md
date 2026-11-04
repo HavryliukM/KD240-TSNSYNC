@@ -693,6 +693,17 @@ RMS chyby. Poloha z knižnice AMD má rozlíšenie 1°, preto pásmo nejde pod 1
 > menia s uhlom s periódou asi 30° (12 periód na otáčku), v oboch smeroch na rovnakých miestach. K tomu suché trenie
 > asi ±0,13 V. Preto sa motor pri pomalom pohybe zasekáva a skáče (RMS chyby 3,3°, max 8°).
 
+> Skoky s kompenzáciou (`kfc 0,11` + tabuľka coggingu, 4. 11. 2026, porovnanie s behom bez nej):
+>
+> | | 20° hore | 20° dole | 45° hore | 45° dole |
+> |---|---|---|---|---|
+> | prekmit | 20 % → 5 % | 15 % → 0 % | 8,9 % → 2,2 % | 0 % → 2,2 % |
+> | ustálenie do ±1° | 1 318 → 194 ms | 1 739 → 543 ms | 1 266 → 130 ms | 126 → 122 ms |
+> | nábeh 10 až 90 % | 90 → 99 ms | 46 → 232 ms | 269 → 88 ms | 90 → 83 ms |
+>
+> Motor sa už nezasekáva na 39° pri skoku 45° hore. Skok 20° dole sa po rýchlom pohybe na 3° plazí do cieľa
+> (statické trenie pri stojacej referencii, kompenzácia trenia je tam vypnutá).
+
 Kompenzácia suchého trenia: `[receiver.voltage_pd] kfc_v` (predvolene 0, vypnutá) pridá k výstupu
 `kfc_v · clamp(w_ref / fc_w0_dps, −1, 1)`, teda napätie v smere žiadanej rýchlosti. Na skúšku bez úpravy configu:
 
@@ -711,8 +722,8 @@ python tools/build_cogging_table.py ramp360_kfc010.csv --out config/cogging_boar
 ./scripts/run_position_test.sh --steps 360:10,0:10 --ramp-dps 45 --kfc 0.11 --cog config/cogging_board2.csv --rt --out ramp360_cog.csv
 ```
 
-V configu: `[receiver.voltage_pd] cogging_table = "config/cogging_board2.csv"`, `cogging_gain = 1.0` (predvolene
-vypnuté). Hodnoty sú orezané na polovicu limitu výstupu. `config/cogging_board2.csv` je z motora testovaného
+V configu: `[receiver.voltage_pd] cogging_table = "config/cogging_board2.csv"`, `cogging_gain = 1.0` (predvolené
+hodnoty v kóde sú vypnuté, `config/board2.toml` a `board2_loopback_real.toml` ich zapínajú spolu s `kfc_v = 0.11`). Hodnoty sú orezané na polovicu limitu výstupu. `config/cogging_board2.csv` je z motora testovaného
 4. 11. 2026 (trenie 0,114 V, cogging −0,16 až +0,21 V, 12 periód). Tabuľka platí, len kým knižnica hlási rovnaký
 absolútny uhol; po reštarte dosky to treba overiť novou rampou a porovnaním tabuliek.
 

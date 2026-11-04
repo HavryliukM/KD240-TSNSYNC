@@ -33,6 +33,10 @@ kff_v_per_dps = 0.00037
 i_limit_v = 0.3
 voltage_limit_v = 0.8
 slew_v_s = 100
+# Kompenzacia trenia a coggingu (4. 11. 2026): pozri config/board2.toml
+kfc_v = 0.11
+cogging_table = "config/cogging_board2.csv"
+cogging_gain = 1.0
 
 [receiver.torque_pd]
 # Krok 1 ladenia (PLAN.md 13.3): ki = 0, kp = 20 % vypocitaneho (0.0237 pre wn = 40 rad/s).

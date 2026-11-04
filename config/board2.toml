@@ -33,6 +33,11 @@ kff_v_per_dps = 0.00037
 i_limit_v = 0.3
 voltage_limit_v = 1.0
 slew_v_s = 100
+# Kompenzacia trenia a coggingu (4. 11. 2026 na tomto motore): pomala rampa RMS 3.4 -> 0.6 deg, skok 45 deg
+# prekmit 8.9 -> 2.2 %, ustalenie 1.27 s -> 0.13 s. Tabulka plati pre tento motor (tools/build_cogging_table.py).
+kfc_v = 0.11
+cogging_table = "config/cogging_board2.csv"
+cogging_gain = 1.0
 
 [receiver.torque_pd]
 # Nepouziva sa (mode = "voltage_pd"). Startovacie hodnoty zo SIMULACIE, nie z realneho motora.
