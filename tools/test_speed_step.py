@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Test rychlostneho servopohonu na jednom motore (bez siete): skoky ziadanej rychlosti v rezime Speed kniznice.
+"""Test rychlostneho servopohonu na jednom motore (bez siete): skoky ziadanej rychlosti, zaznam 2 kHz.
 
-Regulator rychlosti je v kniznici AMD (SPEED_KP, SPEED_KI a rampa SPEED_RRATE v jej configu). Zaznamenava sa
-ziadana a skutocna rychlost, poloha a prud i_q/i_d (vystup regulatora rychlosti), predvolene pri 2 kHz.
+--mode voltage (predvolene): vlastny PI regulator rychlosti cez napatie ([speed_pi] v configu, beh 1 kHz).
+--mode library: rezim Speed kniznice AMD (na porovnanie; 4. 11. 2026 nepouzitelny, pozri kd240sync/speed_test.py).
+Zaznamenava sa ziadana a skutocna rychlost, poloha, vystup regulatora u a volitelne prud i_q/i_d (--dbg-div).
 Profil: ziadana rychlost [ot/min]:trvanie [s]. Motor musi byt volny.
 
 Pouzitie (na doske):
-  ./scripts/run_speed_test.sh --steps 300:2,600:2,0:1.5
-  ./scripts/run_speed_test.sh --steps 300:2,600:2,0:1.5 --repeat 3 --out spd.csv
+  ./scripts/run_speed_test.sh --steps 200:2,400:2,0:1.5 --out spd_pi.csv
+  ./scripts/run_speed_test.sh --steps 200:2,400:2,0:1.5 --cog config/cogging_board2.csv --repeat 3 --out spd.csv
+  ./scripts/run_speed_test.sh --mode library --steps 300:2,600:2,0:1.5 --dbg-div 10 --out spd_lib.csv
   python3 tools/test_speed_step.py --backend sim --steps 300:1,0:1
 Vyhodnotenie na PC: python tools/plot_step_response.py spd.csv
 """
@@ -38,11 +40,19 @@ def report(res, out):
 
 
 def main():
-    p = argparse.ArgumentParser(description="Skokova odozva rychlosti v rezime Speed kniznice AMD, zaznam 2 kHz")
+    p = argparse.ArgumentParser(description="Skokova odozva rychlostneho servopohonu, zaznam 2 kHz")
     p.add_argument("--steps", default="300:2,600:2,0:1.5", help="ziadana rychlost [ot/min]:trvanie [s], ciarkou")
     p.add_argument("--settle", type=float, default=0.5, help="cas na 0 ot/min pred prvym skokom [s]")
     p.add_argument("--sample-hz", type=float, default=2000.0)
-    p.add_argument("--dbg-div", type=int, default=1, help="prud citat kazdu N-tu vzorku (kazde citanie stoji cas)")
+    p.add_argument("--mode", choices=["voltage", "library"], default="voltage",
+                   help="voltage = vlastny PI cez napatie, library = rezim Speed kniznice AMD")
+    p.add_argument("--control-hz", type=float, default=1000.0, help="frekvencia regulatora v rezime voltage")
+    p.add_argument("--kp", type=float, default=None, help="prepise speed_pi.kp_v_per_rpm")
+    p.add_argument("--ki", type=float, default=None, help="prepise speed_pi.ki_v_per_rpm_s")
+    p.add_argument("--kfc", type=float, default=None, help="prepise speed_pi.kfc_v (suche trenie)")
+    p.add_argument("--cog", default=None, help="tabulka coggingu (rovnaka ako pri polohe)")
+    p.add_argument("--dbg-div", type=int, default=0,
+                   help="prud z kniznice citat kazdu N-tu vzorku, 0 = nie (jedno citanie trva ~0,5 ms)")
     p.add_argument("--max-rpm", type=float, default=None,
                    help="nad touto rychlostou motor vypnut (predvolene 1,25 x najvyssia v profile + 100); config "
                         "kniznice ma SPEED_SP=1000 a RST_SPEED=250, pri zapnuti rezimu moze motor kratko ist k nim")
@@ -62,7 +72,12 @@ def main():
     if top > args.max_rpm:
         print(f"Chyba: profil ide na {top:.0f} ot/min, nad --max-rpm {args.max_rpm:.0f}")
         return 1
-    overrides = {"motor": {"backend": args.backend}}
+    overrides = {"motor": {"backend": args.backend}, "speed_pi": {}}
+    for key, val in (("kp_v_per_rpm", args.kp), ("ki_v_per_rpm_s", args.ki), ("kfc_v", args.kfc)):
+        if val is not None:
+            overrides["speed_pi"][key] = val
+    if args.cog:
+        overrides["speed_pi"]["cogging_table"] = os.path.abspath(args.cog)
     if args.lib_config:
         overrides["motor"]["foc_lib"] = {"config_path": os.path.abspath(args.lib_config)}
     cfg = load(args.config, overrides=overrides)
@@ -80,7 +95,8 @@ def main():
                 print(f"--- beh {k + 1}/{args.repeat}")
                 if k:
                     time.sleep(args.pause)
-            res = speed_test.run(cfg, motor, steps, args.sample_hz, args.settle, args.max_rpm, args.dbg_div)
+            res = speed_test.run(cfg, motor, steps, args.sample_hz, args.settle, args.max_rpm, args.dbg_div,
+                                 args.mode, args.control_hz)
             report(res, out)
             if res["fault"]:
                 faults += 1

@@ -92,19 +92,29 @@ def plot_speed(path, data, res, show):
     import matplotlib.pyplot as plt
 
     t = data["t_s"]
-    fig, ax = plt.subplots(2, 1, sharex=True, figsize=(10, 6.5), gridspec_kw={"height_ratios": [2, 1]})
+    has_u = "u" in data and any(x == x for x in data["u"])
+    has_i = any(k in data and any(x == x for x in data[k]) for k in ("i_q", "i_d"))
+    rows = 1 + has_u + has_i
+    fig, ax = plt.subplots(rows, 1, sharex=True, figsize=(10, 3.2 + 2.2 * rows),
+                           gridspec_kw={"height_ratios": [2] + [1] * (rows - 1)}, squeeze=False)
+    ax = list(ax[:, 0])
     ax[0].plot(t, data["speed_rpm"], color="0.75", lw=0.6, label="skutočná (surová)")
     ax[0].plot(t, data["speed_f"], lw=1.1, label=f"skutočná (priemer {SPEED_SMOOTH_S * 1e3:.0f} ms)")
     ax[0].plot(t, data["ref_rpm"], "k--", lw=1, label="žiadaná")
     ax[0].set_ylabel("rýchlosť [ot/min]")
     ax[0].legend(loc="best")
-    for key, lab in (("i_q", "i_q"), ("i_d", "i_d"), ("torque_set", "žiadaný moment z knižnice")):
-        if key in data and any(x == x for x in data[key]):
-            ax[1].plot(t, data[key], lw=0.8, label=lab)
-    ax[1].set_ylabel("prúd [A]")
-    ax[1].set_xlabel("čas [s]")
-    if ax[1].lines:
-        ax[1].legend(loc="best")
+    k = 1
+    if has_u:
+        ax[k].plot(t, data["u"], lw=0.8)
+        ax[k].set_ylabel("výstup u [V]")
+        k += 1
+    if has_i:
+        for key, lab in (("i_q", "i_q"), ("i_d", "i_d")):
+            if key in data and any(x == x for x in data[key]):
+                ax[k].plot(t, data[key], lw=0.8, label=lab)
+        ax[k].set_ylabel("prúd [A]")
+        ax[k].legend(loc="best")
+    ax[-1].set_xlabel("čas [s]")
     for a in ax:
         a.grid(True, alpha=0.3)
     fig.suptitle(os.path.basename(path))

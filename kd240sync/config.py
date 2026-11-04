@@ -62,6 +62,20 @@ DEFAULTS = {
         "spin_us": 0,
         "log_path": "",
     },
+    "speed_pi": {
+        # Vlastny regulator rychlosti cez napatie (controller.SpeedPI), lebo rezim Speed kniznice AMD ma
+        # trvalu odchylku 50 az 80 % a meni sa v tikoch po 0,5 s (namerane 4. 11. 2026). Zisky z modelu motora.
+        "kp_v_per_rpm": 0.004,
+        "ki_v_per_rpm_s": 0.067,      # kp / tau (tau = 0,06 s)
+        "kff_v_per_rpm": 0.00222,     # 1 / (450 ot/min na V)
+        "kfc_v": 0.11,                # suche trenie
+        "fc_w0_rpm": 20.0,
+        "i_limit_v": 0.5,
+        "voltage_limit_v": 1.5,       # strop adaptera kniznice (FocLibMotor.MAX_VOLTAGE_V), ~620 ot/min
+        "slew_v_s": 100.0,
+        "speed_filter_s": 0.002,      # klzavy priemer rychlosti pre regulator (odhad v kniznici sumi)
+        "cogging_table": "",          # volitelne ta ista tabulka ako pri polohe (config/cogging_board2.csv)
+    },
     "receiver": {
         "rate_hz": 200.0,
         "timeout_ms": 50.0,

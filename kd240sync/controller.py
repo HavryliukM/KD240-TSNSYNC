@@ -70,6 +70,43 @@ class SpeedP:
         return self.out
 
 
+class SpeedPI:
+    """Regulator rychlosti s vystupom = napatie Vq [V] (open-loop V/f), namiesto rezimu Speed kniznice AMD.
+
+    u = kff*w_ref + kfc*clamp(w_ref/fc_w0, -1, 1) + kp*(w_ref - w) + integral(ki*(w_ref - w)) + u_ff
+
+    Navrh z modelu motora (29. 10. 2026): ustalene otacky ~450 ot/min na V, casova konstanta tau ~0,06 s.
+    PI nula kompenzuje pol motora (ki/kp = 1/tau), otvorena slucka je potom integrator s presechom
+    wc = 450 * kp / tau; kp = 0,004 V/(ot/min) dava wc ~ 30 rad/s. kff = 1/450 vopred doda napatie pre ziadanu
+    rychlost, kfc suche trenie (0,11 V), u_ff napr. tabulku coggingu podla uhla.
+    """
+
+    def __init__(self, kp, ki, kff=0.0, kfc=0.0, fc_w0_rpm=20.0, limit_v=1.5, slew_v_s=100.0, i_limit_v=0.5):
+        self.kp, self.ki, self.kff, self.kfc = kp, ki, kff, kfc
+        self.fc_w0 = max(1e-6, float(fc_w0_rpm))
+        self.limit, self.slew, self.i_limit = limit_v, slew_v_s, i_limit_v
+        self.reset()
+
+    def reset(self):
+        self.integ = 0.0
+        self.out = 0.0
+
+    def update(self, w_ref_rpm, w_rpm, dt, u_ff=0.0):
+        e = w_ref_rpm - w_rpm
+        u = self.kff * w_ref_rpm + self.kp * e + u_ff
+        if self.kfc:
+            u += self.kfc * _clamp(w_ref_rpm / self.fc_w0, -1.0, 1.0)
+        if self.ki:
+            cand = _clamp(self.integ + self.ki * e * dt, -self.i_limit, self.i_limit)
+            if abs(u + cand) <= self.limit:   # anti-windup: integruj len mimo saturacie
+                self.integ = cand
+            u += self.integ
+        u = _clamp(u, -self.limit, self.limit)
+        step = self.slew * dt
+        self.out = _clamp(u, self.out - step, self.out + step)
+        return self.out
+
+
 class RampLimiter:
     """Obmedzuje zrychlenie ziadanej rychlosti [rpm/s], aby skok nezhodil sledovanie."""
 

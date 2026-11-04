@@ -1,8 +1,8 @@
 #!/bin/bash
-# Skokova odozva rychlosti v rezime Speed kniznice AMD na jednom motore, zaznam 2 kHz do CSV.
+# Skokova odozva rychlosti na jednom motore (vlastny PI cez napatie, alebo --mode library), zaznam 2 kHz.
 # Motor musi byt volny. Pouzitie:
-#   ./scripts/run_speed_test.sh --steps 300:2,600:2,0:1.5
-#   ./scripts/run_speed_test.sh --steps 300:2,600:2,0:1.5 --repeat 3 --out spd.csv
+#   ./scripts/run_speed_test.sh --steps 200:2,400:2,0:1.5 --out spd_pi.csv
+#   ./scripts/run_speed_test.sh --mode library --steps 300:2,600:2,0:1.5 --dbg-div 10 --out spd_lib.csv
 set -e
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LIB=/opt/xilinx/xlnx-app-kd240-foc-motor-ctrl/lib

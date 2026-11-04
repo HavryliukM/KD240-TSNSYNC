@@ -691,17 +691,24 @@ Opakované merania a rýchlosť obnovovania knižnice:
 python tools/update_rate.py rate2k.csv
 ```
 
-### Skoková odozva rýchlosti (režim Speed knižnice AMD)
+### Skoková odozva rýchlosti
 
 ```bash
-./scripts/run_speed_test.sh --steps 300:2,600:2,0:1.5 --rt --out spd.csv
-python tools/plot_step_response.py spd.csv          # na PC: metriky + graf rýchlosti a prúdu
+./scripts/run_speed_test.sh --steps 200:2,400:2,0:1.5 --rt --out spd_pi.csv        # vlastný PI cez napätie
+./scripts/run_speed_test.sh --mode library --steps 300:2,600:2,0:1.5 --rt --out spd_lib.csv
+python tools/plot_step_response.py spd_pi.csv       # na PC: metriky + graf rýchlosti, napätia (a prúdu)
 ```
 
-Regulátor rýchlosti je v knižnici (`SPEED_KP`, `SPEED_KI`, rampa `SPEED_RRATE` v `config/anaheim_torque.config`).
-CSV obsahuje `t_s, ref_rpm, speed_rpm, theta_deg, raw_deg, i_q, i_d, torque_set, read_us, dbg_us`. Časové metriky
-sa počítajú z rýchlosti vyhladenej kĺzavým priemerom 5 ms (odhad v knižnici šumí), zvlnenie zo surovej rýchlosti.
-Strop rýchlosti je predvolene 1,25 × najvyššia rýchlosť profilu + 100 ot/min.
+> Režim Speed knižnice AMD (4. 11. 2026, `config/anaheim_torque.config`, `SPEED_KP=0.005`): pri žiadaných
+> 300 ot/min sa motor ustálil na ~55 ot/min, pri 600 na ~380; rýchlosť sa mení v tikoch po 0,5 s, prúd `i_q`
+> zostáva +0,02 až 0,05 A a každú sekundu jedno volanie knižnice trvá ~50 ms. Na reguláciu rýchlosti nepoužiteľný,
+> preto predvolený režim nástroja je vlastný PI regulátor (`controller.SpeedPI`, `[speed_pi]` v configu): napätie
+> z modelu motora (kff = 1/450 V na ot/min, trenie 0,11 V) plus PI so ziskami z modelu (kp 0,004, ki 0,067).
+
+CSV obsahuje `t_s, ref_rpm, speed_rpm, speed_f, u, theta_deg, raw_deg, i_q, i_d, read_us, dbg_us` (`speed_f` je
+rýchlosť pre regulátor, kĺzavý priemer 2 ms; `i_q`/`i_d` len s `--dbg-div N`, jedno čítanie trvá ~0,5 ms).
+Časové metriky sa počítajú z rýchlosti vyhladenej kĺzavým priemerom 5 ms, zvlnenie zo surovej rýchlosti.
+Strop rýchlosti je predvolene 1,25 × najvyššia rýchlosť profilu + 100 ot/min, napätie najviac 1,5 V (~620 ot/min).
 
 > 4. 11. 2026 pri 2 kHz a ~300 ot/min: rýchlosť z knižnice sa mení v 86 % vzoriek, poloha každých 0,5 až 1 ms
 > (rozlíšenie 1°), takže perióda 0,5 ms prináša nové údaje. Jitter priemer 23 µs, max 323 µs, 1 vynechaný cyklus
