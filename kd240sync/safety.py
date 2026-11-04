@@ -105,42 +105,60 @@ def clamp_gains(kp, kd, ki, limit_a, slew_a_s, max_err_deg, dt, sc):
 
 
 class SpeedGuard:
-    """Kontrola vierohodnosti rychlosti z kniznice AMD.
+    """Kontrola vierohodnosti rychlosti z kniznice AMD, overena polohou.
 
-    Kniznica obcas vrati jednu nezmyselnu hodnotu (4. 11. 2026: 1 -> 695 rpm pri stojacej polohe, raz za ~90 000
-    vzoriek). Skok vacsi nez max_accel * dt + margin sa ignoruje a pouzije sa posledna dobra hodnota; ak nova
-    hodnota vydrzi dlhsie nez hold_s, prijme sa (skutocny rozbeh tak dohlad zachyti s oneskorenim najviac hold_s).
+    Kniznica obcas vrati nezmyselnu rychlost pri stojacom motore (4. 11. 2026: 695 rpm na 2 ms, 93 rpm na 9 ms).
+    Skok nad max_accel * dt + margin je podozrivy a pouzije sa posledna dobra hodnota. Podozriva hodnota sa prijme,
+    az ked ju potvrdi poloha (po confirm_s sa motor pohol aspon o polovicu toho, co by pri nej mal, a aspon
+    o min_move_deg), alebo po max_hold_s (dlhsie sa neda nic vylucit, rozhodne dohlad). Navrat k povodnej
+    hodnote sa prijme hned. Skutocny rozbeh tak dohlad uvidi do confirm_s, chybu kniznice nikdy.
     """
 
-    def __init__(self, max_accel_rpm_s, margin_rpm, hold_s):
+    def __init__(self, max_accel_rpm_s, margin_rpm, confirm_s, max_hold_s, min_move_deg=2.0):
         self.acc = float(max_accel_rpm_s)
         self.margin = float(margin_rpm)
-        self.hold = float(hold_s)
+        self.confirm = float(confirm_s)
+        self.max_hold = float(max_hold_s)
+        self.min_move = float(min_move_deg)
         self.glitches = 0
         self.reset()
 
     def reset(self):
         self.last = None
-        self._t_last = None
-        self._held = 0.0
+        self._t_prev = None
+        self._suspect = None            # (cas, poloha) zaciatku podozrivej hodnoty
 
-    def update(self, now_s, rpm):
+    def update(self, now_s, rpm, theta_deg):
+        """rpm z kniznice, theta_deg rozvinuta poloha. Vrati rychlost pre regulator a dohlad.
+
+        Povoleny skok sa pocita len z jedneho kroku (cas od predosleho volania), nie z casu od poslednej
+        dobrej hodnoty: inak by dlhsia chyba (93 rpm na 9 ms) postupne presla ako 'zrychlenie'.
+        """
+        dt = 0.0 if self._t_prev is None else max(now_s - self._t_prev, 0.0)
+        self._t_prev = now_s
         if self.last is None or not math.isfinite(self.last):
-            self.last, self._t_last = rpm, now_s
+            self.last = rpm
             return rpm
-        dt = max(now_s - self._t_last, 0.0)
-        if abs(rpm - self.last) > self.acc * (dt + self._held) + self.margin and self._held < self.hold:
-            if self._held == 0.0:
-                self.glitches += 1
-            self._held += dt
-            self._t_last = now_s
+        if abs(rpm - self.last) <= self.acc * dt + self.margin:
+            if self._suspect is not None:
+                self.glitches += 1                  # hodnota sa vratila bez pohybu = chyba kniznice
+            self.last, self._suspect = rpm, None
+            return rpm
+        if self._suspect is None:
+            self._suspect = (now_s, theta_deg)
             return self.last
-        self.last, self._t_last, self._held = rpm, now_s, 0.0
-        return rpm
+        t0, th0 = self._suspect
+        el = now_s - t0
+        moved = abs(theta_deg - th0)
+        if (el >= self.confirm and moved >= max(self.min_move, 0.5 * abs(rpm) * 6.0 * el)) or el >= self.max_hold:
+            self.last, self._suspect = rpm, None
+            return rpm
+        return self.last
 
 
 def make_speed_guard(sc):
-    return SpeedGuard(sc.speed_glitch_accel_rpm_s, sc.speed_glitch_margin_rpm, sc.speed_glitch_hold_s)
+    return SpeedGuard(sc.speed_glitch_accel_rpm_s, sc.speed_glitch_margin_rpm,
+                      sc.speed_glitch_confirm_s, sc.speed_glitch_max_hold_s)
 
 
 class Supervisor:

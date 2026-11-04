@@ -147,7 +147,7 @@ def run(cfg, motor, sock, stop_event, quiet=False) -> dict:
             snap, lat_ms = rx.snapshot()
             ms = motor.read()
             local = unw.update(ms.theta_deg)
-            rpm = guard.update(now / 1e9, ms.speed_rpm)
+            rpm = guard.update(now / 1e9, ms.speed_rpm, local)
             if state == FAULT:
                 continue
             fresh = False

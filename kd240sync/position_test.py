@@ -114,7 +114,7 @@ def run(cfg, motor, steps, sample_hz=1000.0, control_hz=None, ramp_dps=0.0, sett
             ms = motor.read()
             read_us = (perf_counter_ns() - r0) / 1e3
             theta = unw.update(ms.theta_deg) - theta0
-            rpm = guard.update(now / 1e9, ms.speed_rpm)          # do CSV ide nefiltrovana rychlost
+            rpm = guard.update(now / 1e9, ms.speed_rpm, theta)   # do CSV ide nefiltrovana rychlost
             r = ref.update(dt_s)
             err = r - theta
             if n % div == 0:
