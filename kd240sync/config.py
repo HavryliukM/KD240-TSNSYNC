@@ -54,6 +54,7 @@ DEFAULTS = {
         "loss": 0.0,              # pravdepodobnost straty paketu
     },
     "sender": {
+        "mode": "library",        # library | voltage_pi (na doske voltage_pi, rezim Speed kniznice je nepresny)
         "rate_hz": 200.0,
         "initial_rpm": 0.0,
         "max_rpm": 2000.0,

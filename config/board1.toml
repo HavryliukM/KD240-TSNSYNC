@@ -14,7 +14,15 @@ module = "py_foc_motor_ctrl"  # py_foc_motor_ctrl (alebo prazdne "" pre autodete
 ka_rad_s2_per_a = 1177       # priemer 5 merani 29. 10. 2026 na doske 1 (1164 az 1192, trenie 22 az 32 rad/s^2), tools/measure_ka.py
 
 [sender]
+mode = "voltage_pi"          # vlastny regulator rychlosti cez napatie ([speed_pi]); rezim Speed kniznice ma
+                             # trvalu odchylku 50 az 80 % (4. 11. 2026)
 rate_hz = 200
 initial_rpm = 0
-max_rpm = 1000               # bezpecnostny limit, zvysuj postupne
+max_rpm = 500                # napatie je obmedzene na 1,5 V (asi 620 ot/min); receiver ma limit 1,0 V (~400)
+ramp_rpm_s = 500
+
+[speed_pi]
+# Zisky z modelu motora na doske 2 (rovnaky typ motora). Tabulku coggingu treba pre tento motor zmerat
+# (tools/build_cogging_table.py), tabulka z dosky 2 sem nepatri.
+cogging_table = ""
 log_path = ""

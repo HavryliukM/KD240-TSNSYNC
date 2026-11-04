@@ -65,5 +65,22 @@ class SpeedTestTests(unittest.TestCase):
         self.assertLess(res["data"]["t_s"][-1], 1.0)
 
 
+class SenderVoltageModeTests(unittest.TestCase):
+    def test_sender_voltage_pi_drives_receiver(self):
+        from kd240sync.demo import run_demo
+        s = run_demo(duration_s=6.0, overrides={"sender": {"mode": "voltage_pi"},
+                                                "receiver": {"mode": "voltage_pd"}})
+        self.assertEqual(s["sender"]["fault"], "")
+        self.assertEqual(s["receiver"]["fault"], "")
+        self.assertLess(s["receiver"]["err_rms_deg"], 8.0)
+
+    def test_board_configs_use_voltage_pi_sender(self):
+        import os
+        base = os.path.join(os.path.dirname(__file__), "..", "config")
+        for name in ("board1.toml", "board1_loopback.toml"):
+            cfg = config.load(os.path.join(base, name))
+            self.assertEqual(cfg.sender.mode, "voltage_pi", name)
+            self.assertLessEqual(cfg.sender.max_rpm, 600, name)    # pod stropom napatia 1,5 V
+
 if __name__ == "__main__":
     unittest.main()

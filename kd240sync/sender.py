@@ -1,13 +1,17 @@
-"""Doska 1: riadi rychlost motora a posiela rozvinuty uhol a rychlost doske 2."""
+"""Doska 1: riadi rychlost motora a posiela rozvinuty uhol a rychlost doske 2.
+
+sender.mode = "library": rezim Speed kniznice AMD (4. 11. 2026 trvala odchylka 50 az 80 %, zmeny v tikoch po 0,5 s).
+sender.mode = "voltage_pi": vlastny regulator rychlosti cez napatie (controller.SpeedPI, sekcia [speed_pi]).
+"""
 import csv
 import queue
 import sys
 import threading
 import time
 
-from . import protocol
+from . import cogging, protocol, safety
 from .angle import Unwrapper
-from .controller import RampLimiter
+from .controller import RampLimiter, SpeedPI
 from .timing import PeriodicLoop
 
 
@@ -41,6 +45,21 @@ def run(cfg, motor, sock, stop_event, commands=None, quiet=False) -> dict:
     log = []
     rpm_set = 0.0
     ramp = RampLimiter(sc.ramp_rpm_s)
+    mode = str(sc.mode)
+    if mode not in ("library", "voltage_pi"):
+        raise ValueError(f"neznamy sender.mode: {mode}")
+    sp = cfg.speed_pi
+    pi = None
+    cog = None
+    if mode == "voltage_pi":
+        pi = SpeedPI(sp.kp_v_per_rpm, sp.ki_v_per_rpm_s, sp.kff_v_per_rpm, sp.kfc_v, sp.fc_w0_rpm,
+                     sp.voltage_limit_v, sp.slew_v_s, sp.i_limit_v, sp.i_band_rpm)
+        if sp.cogging_table:
+            cog = cogging.load(sp.cogging_table, 1.0, 0.5 * float(sp.voltage_limit_v))
+    guard = safety.make_speed_guard(cfg.safety)
+    overspeed = float(sc.max_rpm) * float(cfg.safety.overspeed_factor)
+    out = 0.0
+    fault = ""
     seq = 0
     t0 = time.monotonic()
     last_print = t0
@@ -57,21 +76,31 @@ def run(cfg, motor, sock, stop_event, commands=None, quiet=False) -> dict:
                 if kind == "rpm":
                     rpm_set = _clamp_rpm(val, sc, quiet)
                     ramp.set_target(rpm_set)
-            if ramp.value != ramp.target:
+            if pi is None and ramp.value != ramp.target:
                 motor.set_speed_rpm(ramp.update(period))
             ms = motor.read()
             theta = unw.update(ms.theta_deg)
-            pkt = protocol.Packet(seq, time.time_ns(), theta, ms.speed_rpm,
+            rpm = guard.update(time.monotonic(), ms.speed_rpm, theta)
+            if abs(rpm) > overspeed:
+                fault = f"prekrocena rychlost {rpm:.0f} rpm > {overspeed:.0f} rpm"
+                if not quiet:
+                    print(f"[sender] FAULT: {fault}", flush=True)
+                break                                   # finally: motor.stop() a STOP pakety receiveru
+            if pi is not None:
+                out = pi.update(ramp.update(period), rpm, period, cog(ms.theta_deg) if cog else 0.0)
+                motor.set_voltage_v(out)
+            pkt = protocol.Packet(seq, time.time_ns(), theta, rpm,
                                   protocol.FLAG_VALID)
             sock.sendto(protocol.pack(pkt), peer)
             seq += 1
             if sc.log_path:
-                log.append((time.monotonic() - t0, pkt.seq, rpm_set, theta, ms.speed_rpm))
+                log.append((time.monotonic() - t0, pkt.seq, rpm_set, ramp.value, theta, ms.speed_rpm, out))
             now = time.monotonic()
             if not quiet and now - last_print >= 1.0:
                 last_print = now
                 print(f"[sender] seq={seq} zadane={rpm_set:.0f} rpm "
-                      f"nameranych={ms.speed_rpm:.0f} rpm uhol={theta:.1f} deg", flush=True)
+                      f"nameranych={rpm:.0f} rpm uhol={theta:.1f} deg"
+                      + (f" u={out:+.2f} V" if pi is not None else ""), flush=True)
     finally:
         try:
             motor.stop()
@@ -88,10 +117,12 @@ def run(cfg, motor, sock, stop_event, commands=None, quiet=False) -> dict:
         if sc.log_path and log:
             with open(sc.log_path, "w", newline="") as f:
                 w = csv.writer(f)
-                w.writerow(["t_s", "seq", "rpm_set", "theta_deg", "speed_rpm"])
+                w.writerow(["t_s", "seq", "rpm_set", "rpm_ref", "theta_deg", "speed_rpm", "u"])
                 w.writerows(log)
     stats = loop.stats()
     stats["sent"] = seq
+    stats["fault"] = fault
+    stats["speed_glitches"] = guard.glitches
     return stats
 
 

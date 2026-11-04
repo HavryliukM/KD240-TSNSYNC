@@ -12,6 +12,12 @@ backend = "foc_lib"
 module = "py_foc_motor_ctrl"
 
 [sender]
+mode = "voltage_pi"          # vlastny regulator rychlosti cez napatie (4. 11. 2026), nie rezim Speed kniznice
 rate_hz = 200
 initial_rpm = 0
-max_rpm = 1000               # bezpecnostny limit (povodne 500 pri prvych pokusoch)
+max_rpm = 500                # napatie je obmedzene na 1,5 V (asi 620 ot/min)
+ramp_rpm_s = 500
+log_path = "sender_log.csv"
+
+[speed_pi]
+cogging_table = "config/cogging_board2.csv"   # ten isty motor ako pri meraniach 4. 11. 2026
