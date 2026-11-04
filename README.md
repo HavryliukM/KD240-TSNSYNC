@@ -106,6 +106,7 @@ kd240-tsn-sync/
 │   ├── run_motor_cli.sh          ← priame ovládanie motora bez dashboardu
 │   ├── run_sender.sh             ← spustenie sendera s root a cestami
 │   ├── run_receiver.sh           ← spustenie receivera s root a cestami
+│   ├── run_position_test.sh      ← skoková odozva polohy na 1 motore, záznam 1 kHz
 │   ├── upload_to_board.ps1       ← nahratie projektu z Windows cez PowerShell
 │   └── upload_to_board.sh        ← nahratie projektu z Linux/WSL cez rsync/scp
 ├── web/                          ← moderný webový dashboard (bez extra závislostí)
@@ -116,6 +117,8 @@ kd240-tsn-sync/
 │   ├── check_encoder.py          ← test čítania enkodéra cez sysfs
 │   ├── inspect_motor_lib.py      ← zistenie API motorovej knižnice AMD
 │   ├── analyze_log.py            ← vyhodnotenie CSV logu receivera
+│   ├── test_position_step.py     ← test polohového servopohonu (skoky, rampy), CSV 1 kHz
+│   ├── plot_step_response.py     ← metriky a graf prechodovej charakteristiky (na PC)
 │   └── udp_load.py               ← generátor pozadového UDP zaťaženia
 ├── tests/                        ← automatické testy (unittest)
 │   ├── test_basic.py             ← testy protokolu, uhla, regulátora
@@ -661,6 +664,30 @@ python3 tools/analyze_log.py receiver_log.csv
 ```
 
 Výstup: RMS chyba, maximum, percentily, vek paketu, oneskorenie, rozsah výstupu regulátora.
+
+### Skoková odozva polohy na jednom motore (bez siete)
+
+Na doske (motor voľný, žiadny iný proces s knižnicou AMD):
+
+```bash
+./scripts/run_position_test.sh --steps 20:2,0:2 --rt --out step20.csv
+./scripts/run_position_test.sh --steps 90:3,0:3 --ramp-dps 180 --rt --out ramp90.csv
+```
+
+Profil `cieľ:držanie` je poloha v stupňoch od štartu, `--ramp-dps 0` je skok. Slučka zaznamenáva s periódou 1 ms
+(`--sample-hz`), regulátor `voltage_pd` beží na 200 Hz ako v receiveri. CSV obsahuje `t_s, ref_deg, theta_deg,
+speed_rpm, err_deg, u, read_us` a zapíše sa až po skončení. Na PC (graf potrebuje `pip install matplotlib`):
+
+```bash
+python tools/plot_step_response.py step20.csv            # metriky + step20.png
+python tools/plot_step_response.py step20.csv --band 2 --show
+```
+
+Metriky na úsek: doba nábehu 10 až 90 %, prekmit, doba ustálenia do pásma max(5 % skoku, 1°), trvalá odchýlka,
+RMS chyby. Poloha z knižnice AMD má rozlíšenie 1°, preto pásmo nejde pod 1°.
+
+> Namerané 4. 11. 2026 (skok 20°, `kp 0,028 / kd 0,0010 / ki 0,05`): perióda vzorky 1,000 ms, jitter max 113 µs,
+> `motor.read()` 144 µs, nábeh 83 ms, prekmit 20 %, ustálenie 1,6 s, trvalá odchýlka 1°.
 
 ---
 
