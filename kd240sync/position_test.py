@@ -90,6 +90,7 @@ def run(cfg, motor, steps, sample_hz=1000.0, control_hz=None, ramp_dps=0.0, sett
     ctrl = make_controller(rc, cfg.safety)
     cog = make_cogging(rc)
     sup = safety.Supervisor(sc, dt_c, max_error_deg, max_rpm)
+    guard = safety.make_speed_guard(cfg.safety)
 
     n_max = int((ref.total_s + 1.0) * float(sample_hz)) + 16
     cols = [array("d", bytes(8 * n_max)) for _ in COLUMNS]
@@ -113,12 +114,13 @@ def run(cfg, motor, steps, sample_hz=1000.0, control_hz=None, ramp_dps=0.0, sett
             ms = motor.read()
             read_us = (perf_counter_ns() - r0) / 1e3
             theta = unw.update(ms.theta_deg) - theta0
+            rpm = guard.update(now / 1e9, ms.speed_rpm)          # do CSV ide nefiltrovana rychlost
             r = ref.update(dt_s)
             err = r - theta
             if n % div == 0:
                 u_ff = cog(ms.theta_deg) if cog else 0.0
-                out = ctrl.update(err, ref.w_dps - ms.speed_rpm * 6.0, dt_c, ref.w_dps, u_ff)
-                reason = sup.check(now / 1e9, err, out, 0.0, ms.speed_rpm)
+                out = ctrl.update(err, ref.w_dps - rpm * 6.0, dt_c, ref.w_dps, u_ff)
+                reason = sup.check(now / 1e9, err, out, 0.0, rpm)
                 if reason:
                     fault = reason
                     break
@@ -143,6 +145,7 @@ def run(cfg, motor, steps, sample_hz=1000.0, control_hz=None, ramp_dps=0.0, sett
     data = {name: col[:n] for name, col in zip(COLUMNS, cols)}
     stats = loop.stats()
     stats["samples"] = n
+    stats["speed_glitches"] = guard.glitches
     stats["fault"] = fault
     if n:
         rd = sorted(data["read_us"])

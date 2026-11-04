@@ -36,6 +36,11 @@ DEFAULTS = {
         "osc_flips": 14,
         "overrun_factor": 20.0,   # vypadok cyklu dlhsi nez N periodam -> FAULT
         "overspeed_factor": 1.25, # nad sender.max_rpm * faktor -> FAULT
+        # rychlost z kniznice obcas skoci na nezmysel (695 rpm pri stojacom motore): skok nad
+        # accel*dt + margin sa ignoruje, kym nevydrzi dlhsie nez hold_s (safety.SpeedGuard)
+        "speed_glitch_accel_rpm_s": 20000.0,
+        "speed_glitch_margin_rpm": 15.0,
+        "speed_glitch_hold_s": 0.006,
     },
     "sim_net": {
         # Model TSN linky len pre demo v dashboarde (realna siet sa neovplyvnuje)

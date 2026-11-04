@@ -104,6 +104,45 @@ def clamp_gains(kp, kd, ki, limit_a, slew_a_s, max_err_deg, dt, sc):
             "slew_a_s": slew_a_s, "max_error_deg": max_err_deg}, warns
 
 
+class SpeedGuard:
+    """Kontrola vierohodnosti rychlosti z kniznice AMD.
+
+    Kniznica obcas vrati jednu nezmyselnu hodnotu (4. 11. 2026: 1 -> 695 rpm pri stojacej polohe, raz za ~90 000
+    vzoriek). Skok vacsi nez max_accel * dt + margin sa ignoruje a pouzije sa posledna dobra hodnota; ak nova
+    hodnota vydrzi dlhsie nez hold_s, prijme sa (skutocny rozbeh tak dohlad zachyti s oneskorenim najviac hold_s).
+    """
+
+    def __init__(self, max_accel_rpm_s, margin_rpm, hold_s):
+        self.acc = float(max_accel_rpm_s)
+        self.margin = float(margin_rpm)
+        self.hold = float(hold_s)
+        self.glitches = 0
+        self.reset()
+
+    def reset(self):
+        self.last = None
+        self._t_last = None
+        self._held = 0.0
+
+    def update(self, now_s, rpm):
+        if self.last is None or not math.isfinite(self.last):
+            self.last, self._t_last = rpm, now_s
+            return rpm
+        dt = max(now_s - self._t_last, 0.0)
+        if abs(rpm - self.last) > self.acc * (dt + self._held) + self.margin and self._held < self.hold:
+            if self._held == 0.0:
+                self.glitches += 1
+            self._held += dt
+            self._t_last = now_s
+            return self.last
+        self.last, self._t_last, self._held = rpm, now_s, 0.0
+        return rpm
+
+
+def make_speed_guard(sc):
+    return SpeedGuard(sc.speed_glitch_accel_rpm_s, sc.speed_glitch_margin_rpm, sc.speed_glitch_hold_s)
+
+
 class Supervisor:
     """Dohlad nad regulaciou. check() vola receiver v kazdom cykle v stave RUN."""
 

@@ -76,7 +76,8 @@ def main():
               f"max {st['max_jitter_us']:.0f} us, vynechane cykly {st['overruns']}")
         print(f"motor.read(): priemer {st['read_us_mean']:.0f} us, p99 {st['read_us_p99']:.0f} us, "
               f"max {st['read_us_max']:.0f} us")
-        print(f"Chyba polohy RMS {st['err_rms_deg']:.2f} deg")
+        print(f"Chyba polohy RMS {st['err_rms_deg']:.2f} deg, ignorovane chybne rychlosti z kniznice: "
+              f"{st['speed_glitches']}")
     return 2 if res["fault"] else 0
 
 

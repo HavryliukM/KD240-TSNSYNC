@@ -122,6 +122,7 @@ def run(cfg, motor, sock, stop_event, quiet=False) -> dict:
     max_err = float(rc.max_error_deg)
     ctrl = make_controller(rc, cfg.safety)
     cog = make_cogging(rc)
+    guard = safety.make_speed_guard(cfg.safety)
     sup = safety.Supervisor(cfg.safety, period, max_err,
                             float(cfg.sender.max_rpm) * float(cfg.safety.overspeed_factor))
     voltage_mode = rc.mode == "voltage_pd"
@@ -146,6 +147,7 @@ def run(cfg, motor, sock, stop_event, quiet=False) -> dict:
             snap, lat_ms = rx.snapshot()
             ms = motor.read()
             local = unw.update(ms.theta_deg)
+            rpm = guard.update(now / 1e9, ms.speed_rpm)
             if state == FAULT:
                 continue
             fresh = False
@@ -176,11 +178,11 @@ def run(cfg, motor, sock, stop_event, quiet=False) -> dict:
             w_ref = sign * ratio * pkt.omega_rpm * 6.0
             err = ref - local
             if torque_mode:
-                out = ctrl.update(err, w_ref - ms.speed_rpm * 6.0, dt, w_ref,
+                out = ctrl.update(err, w_ref - rpm * 6.0, dt, w_ref,
                                   cog(ms.theta_deg) if cog else 0.0)
             else:
                 out = ctrl.update(err, w_ref, dt)
-            reason = sup.check(now / 1e9, err, out, getattr(ctrl, "limit", 0.0), ms.speed_rpm)
+            reason = sup.check(now / 1e9, err, out, getattr(ctrl, "limit", 0.0), rpm)
             if reason:
                 motor.stop()
                 state = FAULT
@@ -225,5 +227,6 @@ def run(cfg, motor, sock, stop_event, quiet=False) -> dict:
         "lat_mean_ms": rx.lat_sum / rx.lat_n if rx.lat_n else float("nan"),
         "lat_min_ms": rx.lat_min if rx.lat_n else float("nan"),
         "lat_max_ms": rx.lat_max if rx.lat_n else float("nan"),
+        "speed_glitches": guard.glitches,
     })
     return stats
