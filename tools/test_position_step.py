@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test polohoveho servopohonu na jednom motore (bez siete): skoky alebo rampy polohy, zaznam 1 kHz do CSV.
+"""Test polohoveho servopohonu na jednom motore (bez siete): skoky alebo rampy polohy, zaznam 2 kHz do CSV.
 
 Poloha je relativna od startu (0 deg = kde motor stoji pri spusteni). Profil: cielova poloha:drzanie [s].
 Skok 90 deg pri limite 1 V nasyti vystup, preto zacni malymi skokmi (10 az 30 deg) a motor nechaj volny.
@@ -23,11 +23,12 @@ from kd240sync.timing import try_realtime
 
 
 def main():
-    p = argparse.ArgumentParser(description="Skokova odozva polohoveho servopohonu (voltage_pd), zaznam 1 kHz")
+    p = argparse.ArgumentParser(description="Skokova odozva polohoveho servopohonu (voltage_pd), zaznam 2 kHz")
     p.add_argument("--steps", default="20:2,0:2", help="cielova poloha [deg]:drzanie [s], oddelene ciarkou")
     p.add_argument("--ramp-dps", type=float, default=0.0, help="rychlost rampy [deg/s], 0 = skok")
     p.add_argument("--settle", type=float, default=0.5, help="drzanie na 0 deg pred prvym krokom [s]")
-    p.add_argument("--sample-hz", type=float, default=1000.0, help="vzorkovacia frekvencia zaznamu")
+    p.add_argument("--sample-hz", type=float, default=2000.0,
+                   help="vzorkovacia frekvencia zaznamu (2 kHz overene na doske 4. 11. 2026, kniznica dava nove hodnoty)")
     p.add_argument("--control-hz", type=float, default=None, help="frekvencia regulatora (predvolene receiver.rate_hz)")
     p.add_argument("--max-rpm", type=float, default=600.0, help="nad touto rychlostou FAULT")
     p.add_argument("--max-error", type=float, default=None, help="limit chyby [deg] (predvolene najvacsi skok + 30)")

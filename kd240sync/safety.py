@@ -107,16 +107,18 @@ def clamp_gains(kp, kd, ki, limit_a, slew_a_s, max_err_deg, dt, sc):
 class SpeedGuard:
     """Kontrola vierohodnosti rychlosti z kniznice AMD, overena polohou.
 
-    Kniznica obcas vrati nezmyselnu rychlost pri stojacom motore (4. 11. 2026: 695 rpm na 2 ms, 93 rpm na 9 ms).
-    Skok nad max_accel * dt + margin je podozrivy a pouzije sa posledna dobra hodnota. Podozriva hodnota sa prijme,
+    Kniznica obcas vrati nezmyselnu rychlost pri stojacom motore (4. 11. 2026: 695 rpm na 2 ms, 93 rpm na 9 ms,
+    40 rpm na 55 ms). Skok nad max_accel * dt + margin + rel * |v| je podozrivy (rel: sum odhadu rychlosti
+    v kniznici rastie s rychlostou, pri 300 ot/min asi +-15 rpm medzi vzorkami po 0,5 ms) a pouzije sa posledna dobra hodnota. Podozriva hodnota sa prijme,
     az ked ju potvrdi poloha (po confirm_s sa motor pohol aspon o polovicu toho, co by pri nej mal, a aspon
     o min_move_deg), alebo po max_hold_s (dlhsie sa neda nic vylucit, rozhodne dohlad). Navrat k povodnej
     hodnote sa prijme hned. Skutocny rozbeh tak dohlad uvidi do confirm_s, chybu kniznice nikdy.
     """
 
-    def __init__(self, max_accel_rpm_s, margin_rpm, confirm_s, max_hold_s, min_move_deg=2.0):
+    def __init__(self, max_accel_rpm_s, margin_rpm, confirm_s, max_hold_s, min_move_deg=2.0, rel=0.0):
         self.acc = float(max_accel_rpm_s)
         self.margin = float(margin_rpm)
+        self.rel = float(rel)
         self.confirm = float(confirm_s)
         self.max_hold = float(max_hold_s)
         self.min_move = float(min_move_deg)
@@ -139,7 +141,7 @@ class SpeedGuard:
         if self.last is None or not math.isfinite(self.last):
             self.last = rpm
             return rpm
-        if abs(rpm - self.last) <= self.acc * dt + self.margin:
+        if abs(rpm - self.last) <= self.acc * dt + self.margin + self.rel * abs(self.last):
             if self._suspect is not None:
                 self.glitches += 1                  # hodnota sa vratila bez pohybu = chyba kniznice
             self.last, self._suspect = rpm, None
@@ -158,7 +160,7 @@ class SpeedGuard:
 
 def make_speed_guard(sc):
     return SpeedGuard(sc.speed_glitch_accel_rpm_s, sc.speed_glitch_margin_rpm,
-                      sc.speed_glitch_confirm_s, sc.speed_glitch_max_hold_s)
+                      sc.speed_glitch_confirm_s, sc.speed_glitch_max_hold_s, rel=sc.speed_glitch_rel)
 
 
 class Supervisor:

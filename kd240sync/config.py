@@ -36,12 +36,14 @@ DEFAULTS = {
         "osc_flips": 14,
         "overrun_factor": 20.0,   # vypadok cyklu dlhsi nez N periodam -> FAULT
         "overspeed_factor": 1.25, # nad sender.max_rpm * faktor -> FAULT
-        # rychlost z kniznice obcas skoci na nezmysel pri stojacom motore (695 rpm / 2 ms, 93 rpm / 9 ms):
-        # skok nad accel*dt + margin plati, az ked ho do confirm_s potvrdi pohyb polohy (safety.SpeedGuard)
+        # rychlost z kniznice obcas skoci na nezmysel pri stojacom motore (695 rpm / 2 ms, 93 rpm / 9 ms,
+        # 40 rpm / 55 ms): skok nad accel*dt + margin + rel*|v| plati, az ked ho do confirm_s potvrdi pohyb
+        # polohy (safety.SpeedGuard); bez pohybu sa ignoruje najviac max_hold_s
         "speed_glitch_accel_rpm_s": 20000.0,
         "speed_glitch_margin_rpm": 15.0,
         "speed_glitch_confirm_s": 0.004,
-        "speed_glitch_max_hold_s": 0.05,
+        "speed_glitch_max_hold_s": 0.5,
+        "speed_glitch_rel": 0.1,
     },
     "sim_net": {
         # Model TSN linky len pre demo v dashboarde (realna siet sa neovplyvnuje)

@@ -67,6 +67,20 @@ class SpeedGuardTests(unittest.TestCase):
         self.assertEqual(out[30], 0.0)
         self.assertEqual(out[-1], 700.0)                   # dlhsie nez 50 ms sa neda vylucit, rozhodne dohlad
 
+    def test_stale_value_for_55_ms_without_motion_is_ignored(self):
+        # 40 rpm na 55 ms pri stojacom motore (s20c_1, 4. 11. 2026); strop 50 ms ho prijal a regulator kopol
+        g = SpeedGuard(20000.0, 15.0, 0.004, 0.5, rel=0.1)
+        out = self._feed(g, [(-1.0, 0.0)] * 3 + [(40.0, 0.0)] * 55 + [(-1.0, 0.0)] * 3)
+        self.assertTrue(all(v == -1.0 for v in out), out)
+        self.assertEqual(g.glitches, 1)
+
+    def test_speed_noise_at_high_speed_is_not_a_glitch(self):
+        # 2 kHz pri ~300 ot/min: odhad rychlosti v kniznici skace o +-15 az 30 rpm medzi vzorkami
+        g = SpeedGuard(20000.0, 15.0, 0.004, 0.5, rel=0.1)
+        seq = [(305.0 if i % 2 else 278.0, i * 0.9) for i in range(40)]
+        self.assertEqual(self._feed(g, seq, dt=0.0005), [v for v, _ in seq])
+        self.assertEqual(g.glitches, 0)
+
     def test_receiver_rate(self):
         g = self._guard()                                  # 200 Hz: povoleny skok 115 rpm za 5 ms
         out = self._feed(g, [(0.0, 0), (100.0, 1), (695.0, 2), (101.0, 3)], dt=0.005)

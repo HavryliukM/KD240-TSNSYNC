@@ -106,7 +106,7 @@ kd240-tsn-sync/
 │   ├── run_motor_cli.sh          ← priame ovládanie motora bez dashboardu
 │   ├── run_sender.sh             ← spustenie sendera s root a cestami
 │   ├── run_receiver.sh           ← spustenie receivera s root a cestami
-│   ├── run_position_test.sh      ← skoková odozva polohy na 1 motore, záznam 1 kHz
+│   ├── run_position_test.sh      ← skoková odozva polohy na 1 motore, záznam 2 kHz
 │   ├── upload_to_board.ps1       ← nahratie projektu z Windows cez PowerShell
 │   └── upload_to_board.sh        ← nahratie projektu z Linux/WSL cez rsync/scp
 ├── web/                          ← moderný webový dashboard (bez extra závislostí)
@@ -117,7 +117,7 @@ kd240-tsn-sync/
 │   ├── check_encoder.py          ← test čítania enkodéra cez sysfs
 │   ├── inspect_motor_lib.py      ← zistenie API motorovej knižnice AMD
 │   ├── analyze_log.py            ← vyhodnotenie CSV logu receivera
-│   ├── test_position_step.py     ← test polohového servopohonu (skoky, rampy), CSV 1 kHz
+│   ├── test_position_step.py     ← test polohového servopohonu (skoky, rampy), CSV 2 kHz
 │   ├── plot_step_response.py     ← metriky a graf prechodovej charakteristiky (na PC)
 │   └── udp_load.py               ← generátor pozadového UDP zaťaženia
 ├── tests/                        ← automatické testy (unittest)
@@ -674,14 +674,26 @@ Na doske (motor voľný, žiadny iný proces s knižnicou AMD):
 ./scripts/run_position_test.sh --steps 90:3,0:3 --ramp-dps 180 --rt --out ramp90.csv
 ```
 
-Profil `cieľ:držanie` je poloha v stupňoch od štartu, `--ramp-dps 0` je skok. Slučka zaznamenáva s periódou 1 ms
-(`--sample-hz`), regulátor `voltage_pd` beží na 200 Hz ako v receiveri. CSV obsahuje `t_s, ref_deg, theta_deg,
+Profil `cieľ:držanie` je poloha v stupňoch od štartu, `--ramp-dps 0` je skok. Slučka zaznamenáva s periódou 0,5 ms
+(`--sample-hz`, predvolene 2000; do 4. 11. 2026 sa merali skoky a rampy pri 1 kHz), regulátor `voltage_pd` beží na 200 Hz ako v receiveri. CSV obsahuje `t_s, ref_deg, theta_deg,
 speed_rpm, err_deg, u, read_us` a zapíše sa až po skončení. Na PC (graf potrebuje `pip install matplotlib`):
 
 ```bash
 python tools/plot_step_response.py step20.csv            # metriky + step20.png
 python tools/plot_step_response.py step20.csv --band 2 --show
 ```
+
+Opakované merania a rýchlosť obnovovania knižnice:
+
+```bash
+./scripts/run_position_test.sh --steps 20:3,0:3 --repeat 5 --rt --out s20c.csv     # s20c_1.csv až s20c_5.csv
+./scripts/run_position_test.sh --steps 720:1.5,0:1.5 --ramp-dps 1440 --rt --out rate2k.csv
+python tools/update_rate.py rate2k.csv
+```
+
+> 4. 11. 2026 pri 2 kHz a ~300 ot/min: rýchlosť z knižnice sa mení v 86 % vzoriek, poloha každých 0,5 až 1 ms
+> (rozlíšenie 1°), takže perióda 0,5 ms prináša nové údaje. Jitter priemer 23 µs, max 323 µs, 1 vynechaný cyklus
+> zo 7 000.
 
 Metriky na úsek: doba nábehu 10 až 90 %, prekmit, doba ustálenia do pásma max(5 % skoku, 1°), trvalá odchýlka,
 RMS chyby. Poloha z knižnice AMD má rozlíšenie 1°, preto pásmo nejde pod 1°.

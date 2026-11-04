@@ -1,6 +1,6 @@
 """Test polohoveho servopohonu na jednom motore: skoky/rampy polohy, rychly zaznam do RAM (bez siete).
 
-Slucka bezi s periodou 1/sample_hz (predvolene 1 kHz) a v kazdej vzorke zapise cas, ziadanu a skutocnu polohu,
+Slucka bezi s periodou 1/sample_hz (nastroj predvolene 2 kHz) a v kazdej vzorke zapise cas, ziadanu a skutocnu polohu,
 rychlost, vystup regulatora a trvanie motor.read(). Regulator sa vola kazdu sample_hz/control_hz-tu vzorku
 (predvolene 200 Hz ako v receiveri). Zapis na disk az po skonceni, aby I/O nerobilo jitter.
 """

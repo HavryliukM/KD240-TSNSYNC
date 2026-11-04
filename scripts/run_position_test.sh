@@ -1,5 +1,5 @@
 #!/bin/bash
-# Skokova odozva polohoveho servopohonu na jednom motore (voltage_pd), zaznam 1 kHz do CSV.
+# Skokova odozva polohoveho servopohonu na jednom motore (voltage_pd), zaznam 2 kHz do CSV.
 # Motor musi byt volny. Pouzitie:
 #   ./scripts/run_position_test.sh --steps 20:2,0:2
 #   ./scripts/run_position_test.sh --steps 90:2,0:2 --ramp-dps 360 --out ramp.csv
