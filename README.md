@@ -704,6 +704,11 @@ python tools/plot_step_response.py spd_pi.csv       # na PC: metriky + graf rýc
 > zostáva +0,02 až 0,05 A a každú sekundu jedno volanie knižnice trvá ~50 ms. Na reguláciu rýchlosti nepoužiteľný,
 > preto predvolený režim nástroja je vlastný PI regulátor (`controller.SpeedPI`, `[speed_pi]` v configu): napätie
 > z modelu motora (kff = 1/450 V na ot/min, trenie 0,11 V) plus PI so ziskami z modelu (kp 0,004, ki 0,067).
+>
+> Vlastný PI na doske (skoky 0 → 200 → 400 → 0 ot/min, 2 kHz, 1 beh): s integráciou len pri chybe do 30 ot/min
+> a tabuľkou coggingu (`--cog config/cogging_board2.csv`) nábeh 40 až 42 ms, prekmit 3,2 až 4,9 %, ustálenie do
+> ±10 ot/min 58 až 60 ms, trvalá odchýlka 0. Bez tabuľky trvá ustálenie do 2 s (kolísanie od coggingu), bez
+> podmienenej integrácie je prekmit 11 až 25 %.
 
 CSV obsahuje `t_s, ref_rpm, speed_rpm, speed_f, u, theta_deg, raw_deg, i_q, i_d, read_us, dbg_us` (`speed_f` je
 rýchlosť pre regulátor, kĺzavý priemer 2 ms; `i_q`/`i_d` len s `--dbg-div N`, jedno čítanie trvá ~0,5 ms).
