@@ -12,7 +12,7 @@ from time import perf_counter_ns
 from . import safety
 from .angle import Unwrapper
 from .config import Cfg
-from .receiver import make_controller
+from .receiver import make_cogging, make_controller
 from .timing import PeriodicLoop
 
 COLUMNS = ("t_s", "ref_deg", "theta_deg", "speed_rpm", "err_deg", "u", "read_us", "raw_deg")
@@ -88,6 +88,7 @@ def run(cfg, motor, steps, sample_hz=1000.0, control_hz=None, ramp_dps=0.0, sett
     sc = Cfg(dict(cfg.safety))
     sc["spike_deg"] = 1e9
     ctrl = make_controller(rc, cfg.safety)
+    cog = make_cogging(rc)
     sup = safety.Supervisor(sc, dt_c, max_error_deg, max_rpm)
 
     n_max = int((ref.total_s + 1.0) * float(sample_hz)) + 16
@@ -115,7 +116,8 @@ def run(cfg, motor, steps, sample_hz=1000.0, control_hz=None, ramp_dps=0.0, sett
             r = ref.update(dt_s)
             err = r - theta
             if n % div == 0:
-                out = ctrl.update(err, ref.w_dps - ms.speed_rpm * 6.0, dt_c, ref.w_dps)
+                u_ff = cog(ms.theta_deg) if cog else 0.0
+                out = ctrl.update(err, ref.w_dps - ms.speed_rpm * 6.0, dt_c, ref.w_dps, u_ff)
                 reason = sup.check(now / 1e9, err, out, 0.0, ms.speed_rpm)
                 if reason:
                     fault = reason

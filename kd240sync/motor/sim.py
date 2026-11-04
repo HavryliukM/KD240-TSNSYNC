@@ -17,10 +17,12 @@ class SimMotor(Motor):
     def __init__(self, J=2e-5, kt=0.05, b=1e-5, coulomb=5e-4, tau_speed=0.05,
                  accel_limit_rpm_s=20000.0, counts_per_rev=4096,
                  initial_theta_deg=0.0, clock=time.monotonic_ns,
-                 kv_rad_s_per_v=47.0, tau_v=0.06, v_dead=0.09):
+                 kv_rad_s_per_v=47.0, tau_v=0.06, v_dead=0.09, cog_v=0.0, cog_periods=12):
         # rezim 'voltage' je prvy rad podla merania na doske 29. 10. 2026:
         # ustalene otacky = kv*(|V| - v_dead), casova konstanta tau_v
         self.kv, self.tau_v, self.v_dead = kv_rad_s_per_v, tau_v, v_dead
+        # cogging ako napatova porucha zavisla od uhla rotora (na doske 4. 11. 2026 asi 0.15 V, 12 period)
+        self.cog_v, self.cog_periods = cog_v, cog_periods
         self.v_set = 0.0
         self.J, self.kt, self.b, self.coulomb = J, kt, b, coulomb
         self.tau_speed = tau_speed
@@ -49,8 +51,9 @@ class SimMotor(Motor):
                 dw = max(-self.acc_lim, min(self.acc_lim, dw))
                 self.omega += dw * h
             elif self.mode == "voltage":
-                eff = max(0.0, abs(self.v_set) - self.v_dead)
-                target = math.copysign(self.kv * eff, self.v_set)
+                v = self.v_set - self.cog_v * math.sin(self.cog_periods * self.theta)
+                eff = max(0.0, abs(v) - self.v_dead)
+                target = math.copysign(self.kv * eff, v)
                 self.omega += (target - self.omega) / self.tau_v * h
             else:
                 tq = self.kt * self.i_set if self.mode == "torque" else 0.0

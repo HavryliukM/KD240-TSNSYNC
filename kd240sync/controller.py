@@ -29,7 +29,8 @@ class TorquePD:
         self.integ = 0.0
         self.out = 0.0
 
-    def update(self, e_deg, w_err_dps, dt, w_ref_dps=0.0):
+    def update(self, e_deg, w_err_dps, dt, w_ref_dps=0.0, u_ff=0.0):
+        """u_ff = dalsi dopredny clen vo vystupnych jednotkach (napr. tabulka coggingu podla uhla)."""
         # mala mrtva zona okolo nuly: kvantovanie enkodera by inak v kluzi vyrabalo
         # trvale mikro-kmity momentu (motor sa 'chvie' na -0.1 rpm)
         e_raw = e_deg
@@ -37,7 +38,7 @@ class TorquePD:
             e_deg -= max(-self.deadband, min(self.deadband, e_deg))
             if e_deg == 0.0 and abs(w_err_dps) < 1.0:
                 w_err_dps = 0.0
-        u = self.kp * e_deg + self.kd * w_err_dps + self.kff * w_ref_dps
+        u = self.kp * e_deg + self.kd * w_err_dps + self.kff * w_ref_dps + u_ff
         if self.kfc:
             u += self.kfc * _clamp(w_ref_dps / self.fc_w0, -1.0, 1.0)
         if self.ki:

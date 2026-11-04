@@ -703,6 +703,19 @@ Kompenzácia suchého trenia: `[receiver.voltage_pd] kfc_v` (predvolene 0, vypnu
 Stĺpec `raw_deg` v CSV je uhol z knižnice bez rozvinutia. Slúži na overenie, či je cogging viazaný na absolútny
 uhol aj po reštarte, čo je podmienka pre tabuľku kompenzácie podľa uhla.
 
+Kompenzácia coggingu: tabuľka napätia podľa absolútneho uhla z rampy cez celú otáčku hore aj dole. Priemer oboch
+smerov vyruší trenie, polovica rozdielu je odhad trenia (odporúčané `kfc_v`):
+
+```bash
+python tools/build_cogging_table.py ramp360_kfc010.csv --out config/cogging_board2.csv --plot
+./scripts/run_position_test.sh --steps 360:10,0:10 --ramp-dps 45 --kfc 0.11 --cog config/cogging_board2.csv --rt --out ramp360_cog.csv
+```
+
+V configu: `[receiver.voltage_pd] cogging_table = "config/cogging_board2.csv"`, `cogging_gain = 1.0` (predvolene
+vypnuté). Hodnoty sú orezané na polovicu limitu výstupu. `config/cogging_board2.csv` je z motora testovaného
+4. 11. 2026 (trenie 0,114 V, cogging −0,16 až +0,21 V, 12 periód). Tabuľka platí, len kým knižnica hlási rovnaký
+absolútny uhol; po reštarte dosky to treba overiť novou rampou a porovnaním tabuliek.
+
 ---
 
 ## Ladenie regulátora

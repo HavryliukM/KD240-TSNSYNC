@@ -5,7 +5,7 @@ import socket
 import threading
 import time
 
-from . import protocol
+from . import cogging, protocol
 from .angle import Unwrapper
 from . import safety
 from .config import Cfg
@@ -104,6 +104,14 @@ def make_controller(rc, sc=None):
     raise ValueError(f"neznamy receiver.mode: {rc.mode}")
 
 
+def make_cogging(rc):
+    """Tabulka coggingu pre voltage_pd alebo None. Hodnoty orezane na polovicu limitu vystupu."""
+    v = rc.voltage_pd
+    if rc.mode != "voltage_pd" or not v.cogging_table:
+        return None
+    return cogging.load(v.cogging_table, v.cogging_gain, 0.5 * float(v.voltage_limit_v))
+
+
 def run(cfg, motor, sock, stop_event, quiet=False) -> dict:
     rc = cfg.receiver
     period = 1.0 / float(rc.rate_hz)
@@ -113,6 +121,7 @@ def run(cfg, motor, sock, stop_event, quiet=False) -> dict:
     ratio = float(rc.ratio)
     max_err = float(rc.max_error_deg)
     ctrl = make_controller(rc, cfg.safety)
+    cog = make_cogging(rc)
     sup = safety.Supervisor(cfg.safety, period, max_err,
                             float(cfg.sender.max_rpm) * float(cfg.safety.overspeed_factor))
     voltage_mode = rc.mode == "voltage_pd"
@@ -167,7 +176,8 @@ def run(cfg, motor, sock, stop_event, quiet=False) -> dict:
             w_ref = sign * ratio * pkt.omega_rpm * 6.0
             err = ref - local
             if torque_mode:
-                out = ctrl.update(err, w_ref - ms.speed_rpm * 6.0, dt, w_ref)
+                out = ctrl.update(err, w_ref - ms.speed_rpm * 6.0, dt, w_ref,
+                                  cog(ms.theta_deg) if cog else 0.0)
             else:
                 out = ctrl.update(err, w_ref, dt)
             reason = sup.check(now / 1e9, err, out, getattr(ctrl, "limit", 0.0), ms.speed_rpm)

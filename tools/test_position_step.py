@@ -32,6 +32,8 @@ def main():
     p.add_argument("--max-error", type=float, default=None, help="limit chyby [deg] (predvolene najvacsi skok + 30)")
     p.add_argument("--spin-us", type=float, default=0.0, help="aktivne cakanie na termin vzorky [us]")
     p.add_argument("--kfc", type=float, default=None, help="kompenzacia trenia [V] (prepise receiver.voltage_pd.kfc_v)")
+    p.add_argument("--cog", default=None, help="tabulka coggingu (tools/build_cogging_table.py)")
+    p.add_argument("--cog-gain", type=float, default=None, help="nasobok tabulky coggingu (napr. 0.5)")
     p.add_argument("--rt", action="store_true", help="SCHED_FIFO (vyzaduje root)")
     p.add_argument("--backend", choices=["foc_lib", "sim"], default="foc_lib")
     p.add_argument("--config", default=None)
@@ -42,8 +44,13 @@ def main():
     overrides = {"motor": {"backend": args.backend}, "receiver": {"mode": "voltage_pd"}}
     if args.lib_config:
         overrides["motor"]["foc_lib"] = {"config_path": os.path.abspath(args.lib_config)}
+    vp = overrides["receiver"]["voltage_pd"] = {}
     if args.kfc is not None:
-        overrides["receiver"]["voltage_pd"] = {"kfc_v": args.kfc}
+        vp["kfc_v"] = args.kfc
+    if args.cog:
+        vp["cogging_table"] = os.path.abspath(args.cog)
+    if args.cog_gain is not None:
+        vp["cogging_gain"] = args.cog_gain
     cfg = load(args.config, overrides=overrides)
     steps = position_test.parse_steps(args.steps)
 
