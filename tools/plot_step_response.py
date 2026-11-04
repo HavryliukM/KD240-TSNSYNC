@@ -59,9 +59,19 @@ def smooth(t, v, window_s):
     return out
 
 
+def guarded_speed(data):
+    """Surova rychlost po tej istej kontrole vierohodnosti ako v regulatore (chyby kniznice pri stojacom
+    motore by inak skreslili metriky, napr. ustalenie 1,3 s namiesto 60 ms v spdc_2.csv)."""
+    from kd240sync.config import load
+    from kd240sync.safety import make_speed_guard
+    g = make_speed_guard(load(None).safety)
+    return [g.update(t, v, th) for t, v, th in zip(data["t_s"], data["speed_rpm"], data["theta_deg"])]
+
+
 def analyze_speed(data, band_pct):
     data = dict(data)
-    data["speed_f"] = smooth(data["t_s"], data["speed_rpm"], SPEED_SMOOTH_S)
+    data["speed_g"] = guarded_speed(data)
+    data["speed_f"] = smooth(data["t_s"], data["speed_g"], SPEED_SMOOTH_S)
     res = analyze(data, band_pct, SPEED_BAND_MIN, "ref_rpm", "speed_f", ess_window_s=0.5)
     raw = analyze(data, band_pct, SPEED_BAND_MIN, "ref_rpm", "speed_rpm", ess_window_s=0.5)
     for m, r in zip(res, raw):
