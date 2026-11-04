@@ -704,8 +704,8 @@ RMS chyby. Poloha z knižnice AMD má rozlíšenie 1°, preto pásmo nejde pod 1
 > Motor sa už nezasekáva na 39° pri skoku 45° hore. Skok 20° dole sa po rýchlom pohybe na 3° plazí do cieľa
 > (statické trenie pri stojacej referencii, kompenzácia trenia je tam vypnutá).
 
-> Receiver v loopbacku na skutočnom motore (sender simulovaný, rpm 50 / 100 / −100 / stop, 12 416 vzoriek, bez FAULT-u):
-> RMS chyby **0,39°** (bez kompenzácie 1,29°), p95 1,0° (2,7°), max 2,7° (9,1°); pri pohybe RMS 0,44°, pri držaní 0,07°.
+> Receiver v loopbacku na skutočnom motore (sender simulovaný, žiadaná rýchlosť 0 → 100 → −100 ot/min, 12 416 vzoriek, bez FAULT-u):
+> RMS chyby **0,39°** (bez kompenzácie 1,29°), p95 1,0° (2,7°), max 2,7° (9,1°); pri pohybe RMS 0,44° (1,47° pri ladení 29. 10.).
 
 Kompenzácia suchého trenia: `[receiver.voltage_pd] kfc_v` (predvolene 0, vypnutá) pridá k výstupu
 `kfc_v · clamp(w_ref / fc_w0_dps, −1, 1)`, teda napätie v smere žiadanej rýchlosti. Na skúšku bez úpravy configu:
