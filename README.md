@@ -709,6 +709,10 @@ python tools/plot_step_response.py spd_pi.csv       # na PC: metriky + graf rýc
 > a tabuľkou coggingu (`--cog config/cogging_board2.csv`) nábeh 40 až 42 ms, prekmit 3,2 až 4,9 %, ustálenie do
 > ±10 ot/min 58 až 60 ms, trvalá odchýlka 0. Bez tabuľky trvá ustálenie do 2 s (kolísanie od coggingu), bez
 > podmienenej integrácie je prekmit 11 až 25 %.
+>
+> Sender s `mode = "voltage_pi"` na skutočnom motore (`config/board1_loopback.toml`, 200 Hz, 0 / ±200 / 400 / ±500
+> ot/min): ustálená odchýlka priemeru do 2 ot/min (režim Speed knižnice: 300 → 55 ot/min), rýchlosť z polohy cez
+> 50 ms kolíše o 2 až 5 ot/min; väčšie kolísanie surovej rýchlosti z knižnice (8 až 20 ot/min) je šum jej odhadu.
 
 CSV obsahuje `t_s, ref_rpm, speed_rpm, speed_f, u, theta_deg, raw_deg, i_q, i_d, read_us, dbg_us` (`speed_f` je
 rýchlosť pre regulátor, kĺzavý priemer 2 ms; `i_q`/`i_d` len s `--dbg-div N`, jedno čítanie trvá ~0,5 ms).
