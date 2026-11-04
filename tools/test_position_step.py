@@ -12,6 +12,7 @@ Pouzitie (na doske):
 import argparse
 import os
 import sys
+import time
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -39,6 +40,9 @@ def main():
     p.add_argument("--config", default=None)
     p.add_argument("--lib-config", default=None, help="Config kniznice AMD (anaheim_torque.config)")
     p.add_argument("--out", default="position_step.csv")
+    p.add_argument("--repeat", type=int, default=1,
+                   help="pocet opakovani profilu; pri N > 1 sa uklada ako <out>_1.csv az <out>_N.csv")
+    p.add_argument("--pause", type=float, default=1.0, help="pauza medzi opakovaniami [s] (motor vypnuty)")
     args = p.parse_args()
 
     overrides = {"motor": {"backend": args.backend}, "receiver": {"mode": "voltage_pd"}}
@@ -58,27 +62,42 @@ def main():
         print("SCHED_FIFO sa nepodarilo nastavit (treba root)")
     motor = create_motor(cfg)
     motor.open()
+    base, ext = os.path.splitext(args.out)
+    faults = 0
     try:
-        res = position_test.run(cfg, motor, steps, args.sample_hz, args.control_hz, args.ramp_dps, args.settle,
-                                args.max_error, args.max_rpm, args.spin_us)
+        for k in range(max(1, args.repeat)):
+            out = args.out if args.repeat <= 1 else f"{base}_{k + 1}{ext or '.csv'}"
+            if args.repeat > 1:
+                print(f"--- beh {k + 1}/{args.repeat}")
+                if k:
+                    time.sleep(args.pause)
+            res = position_test.run(cfg, motor, steps, args.sample_hz, args.control_hz, args.ramp_dps,
+                                    args.settle, args.max_error, args.max_rpm, args.spin_us)
+            report(res, out)
+            if res["fault"]:
+                faults += 1
+                break                                   # po FAULT dalsie behy nespustat
     except KeyboardInterrupt:
         print("\nPrerusene")
         return 1
     finally:
         motor.stop()
         motor.close()
+    return 2 if faults else 0
 
+
+def report(res, out):
     st = res["stats"]
-    if st["samples"]:
-        position_test.write_csv(args.out, res["data"])
-        print(f"Zapisane {st['samples']} vzoriek do {args.out}")
-        print(f"Perioda vzorky: priemer {st['period_ms_mean']:.3f} ms, jitter priemer {st['mean_jitter_us']:.0f} us, "
-              f"max {st['max_jitter_us']:.0f} us, vynechane cykly {st['overruns']}")
-        print(f"motor.read(): priemer {st['read_us_mean']:.0f} us, p99 {st['read_us_p99']:.0f} us, "
-              f"max {st['read_us_max']:.0f} us")
-        print(f"Chyba polohy RMS {st['err_rms_deg']:.2f} deg, ignorovane chybne rychlosti z kniznice: "
-              f"{st['speed_glitches']}")
-    return 2 if res["fault"] else 0
+    if not st["samples"]:
+        return
+    position_test.write_csv(out, res["data"])
+    print(f"Zapisane {st['samples']} vzoriek do {out}")
+    print(f"Perioda vzorky: priemer {st['period_ms_mean']:.3f} ms, jitter priemer {st['mean_jitter_us']:.0f} us, "
+          f"max {st['max_jitter_us']:.0f} us, vynechane cykly {st['overruns']}")
+    print(f"motor.read(): priemer {st['read_us_mean']:.0f} us, p99 {st['read_us_p99']:.0f} us, "
+          f"max {st['read_us_max']:.0f} us")
+    print(f"Chyba polohy RMS {st['err_rms_deg']:.2f} deg, ignorovane chybne rychlosti z kniznice: "
+          f"{st['speed_glitches']}")
 
 
 if __name__ == "__main__":
