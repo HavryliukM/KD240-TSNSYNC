@@ -79,10 +79,16 @@ class SpeedPI:
     PI nula kompenzuje pol motora (ki/kp = 1/tau), otvorena slucka je potom integrator s presechom
     wc = 450 * kp / tau; kp = 0,004 V/(ot/min) dava wc ~ 30 rad/s. kff = 1/450 vopred doda napatie pre ziadanu
     rychlost, kfc suche trenie (0,11 V), u_ff napr. tabulku coggingu podla uhla.
+
+    Integrator pracuje len pri chybe do i_band_rpm: dopredny clen uz doda takmer cele napatie, integrator ma
+    len doladit zvysok. Pri skoku by inak za ~25 ms nabehu nazbieral ~0,3 V a motor prekmitol o 15 az 25 %
+    (namerane 4. 11. 2026); v simulacii pasmo 30 ot/min znizi prekmit z 19 % na 3 %.
     """
 
-    def __init__(self, kp, ki, kff=0.0, kfc=0.0, fc_w0_rpm=20.0, limit_v=1.5, slew_v_s=100.0, i_limit_v=0.5):
+    def __init__(self, kp, ki, kff=0.0, kfc=0.0, fc_w0_rpm=20.0, limit_v=1.5, slew_v_s=100.0, i_limit_v=0.5,
+                 i_band_rpm=float("inf")):
         self.kp, self.ki, self.kff, self.kfc = kp, ki, kff, kfc
+        self.i_band = float(i_band_rpm)
         self.fc_w0 = max(1e-6, float(fc_w0_rpm))
         self.limit, self.slew, self.i_limit = limit_v, slew_v_s, i_limit_v
         self.reset()
@@ -97,9 +103,10 @@ class SpeedPI:
         if self.kfc:
             u += self.kfc * _clamp(w_ref_rpm / self.fc_w0, -1.0, 1.0)
         if self.ki:
-            cand = _clamp(self.integ + self.ki * e * dt, -self.i_limit, self.i_limit)
-            if abs(u + cand) <= self.limit:   # anti-windup: integruj len mimo saturacie
-                self.integ = cand
+            if abs(e) <= self.i_band:
+                cand = _clamp(self.integ + self.ki * e * dt, -self.i_limit, self.i_limit)
+                if abs(u + cand) <= self.limit:   # anti-windup: integruj len mimo saturacie
+                    self.integ = cand
             u += self.integ
         u = _clamp(u, -self.limit, self.limit)
         step = self.slew * dt

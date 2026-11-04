@@ -30,6 +30,12 @@ class SpeedPITests(unittest.TestCase):
         for _ in range(1000):
             u = c.update(100.0, 0.0, 0.001)
         self.assertAlmostEqual(u, 0.3)                                      # integrator obmedzeny i_limit
+        c = SpeedPI(kp=0.0, ki=10.0, limit_v=1.5, slew_v_s=1e6, i_band_rpm=30.0)
+        for _ in range(100):
+            c.update(200.0, 0.0, 0.001)                                     # velka chyba pri nabehu
+        self.assertEqual(c.integ, 0.0)
+        c.update(200.0, 190.0, 0.001)
+        self.assertAlmostEqual(c.integ, 0.1)                                # pri malej chybe integruje
 
 
 class SpeedTestTests(unittest.TestCase):
@@ -44,6 +50,7 @@ class SpeedTestTests(unittest.TestCase):
             self.assertIsNotNone(m["settle_s"])
             self.assertLess(abs(m["ess_deg"]), 5.0)
             self.assertLess(m["rise_s"], 0.15)
+            self.assertLess(m["overshoot_pct"], 8.0)                        # podmienena integracia
         self.assertGreater(max(d["u"]), 0.5)                                # regulator naozaj daval napatie
 
     def test_library_mode_still_available(self):

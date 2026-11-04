@@ -71,6 +71,7 @@ DEFAULTS = {
         "kfc_v": 0.11,                # suche trenie
         "fc_w0_rpm": 20.0,
         "i_limit_v": 0.5,
+        "i_band_rpm": 30.0,           # integrator len pri chybe do tejto hodnoty (inak prekmit 15 az 25 %)
         "voltage_limit_v": 1.5,       # strop adaptera kniznice (FocLibMotor.MAX_VOLTAGE_V), ~620 ot/min
         "slew_v_s": 100.0,
         "speed_filter_s": 0.002,      # klzavy priemer rychlosti pre regulator (odhad v kniznici sumi)

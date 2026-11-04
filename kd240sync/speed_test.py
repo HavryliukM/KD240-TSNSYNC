@@ -26,7 +26,7 @@ __all__ = ["COLUMNS", "make_speed_pi", "parse_steps", "run", "write_csv"]
 
 def make_speed_pi(sp):
     return SpeedPI(sp.kp_v_per_rpm, sp.ki_v_per_rpm_s, sp.kff_v_per_rpm, sp.kfc_v, sp.fc_w0_rpm,
-                   sp.voltage_limit_v, sp.slew_v_s, sp.i_limit_v)
+                   sp.voltage_limit_v, sp.slew_v_s, sp.i_limit_v, sp.i_band_rpm)
 
 
 def run(cfg, motor, steps, sample_hz=2000.0, settle_s=0.5, max_rpm=1500.0, dbg_div=0, mode="voltage",
