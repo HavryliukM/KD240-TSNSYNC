@@ -687,7 +687,21 @@ Metriky na úsek: doba nábehu 10 až 90 %, prekmit, doba ustálenia do pásma m
 RMS chyby. Poloha z knižnice AMD má rozlíšenie 1°, preto pásmo nejde pod 1°.
 
 > Namerané 4. 11. 2026 (skok 20°, `kp 0,028 / kd 0,0010 / ki 0,05`): perióda vzorky 1,000 ms, jitter max 113 µs,
-> `motor.read()` 144 µs, nábeh 83 ms, prekmit 20 %, ustálenie 1,6 s, trvalá odchýlka 1°.
+> `motor.read()` 144 µs, nábeh 83 ms, prekmit 20 %, ustálenie 1,3 až 1,6 s, motor dotiahne na cieľ až po 1 až 2 s.
+>
+> Pomalá rampa cez celú otáčku (`--steps 360:10,0:10 --ramp-dps 45`) ukázala **cogging**: chyba a potrebné napätie sa
+> menia s uhlom s periódou asi 30° (12 periód na otáčku), v oboch smeroch na rovnakých miestach. K tomu suché trenie
+> asi ±0,13 V. Preto sa motor pri pomalom pohybe zasekáva a skáče (RMS chyby 3,3°, max 8°).
+
+Kompenzácia suchého trenia: `[receiver.voltage_pd] kfc_v` (predvolene 0, vypnutá) pridá k výstupu
+`kfc_v · clamp(w_ref / fc_w0_dps, −1, 1)`, teda napätie v smere žiadanej rýchlosti. Na skúšku bez úpravy configu:
+
+```bash
+./scripts/run_position_test.sh --steps 360:10,0:10 --ramp-dps 45 --kfc 0.10 --rt --out ramp360_kfc010.csv
+```
+
+Stĺpec `raw_deg` v CSV je uhol z knižnice bez rozvinutia. Slúži na overenie, či je cogging viazaný na absolútny
+uhol aj po reštarte, čo je podmienka pre tabuľku kompenzácie podľa uhla.
 
 ---
 

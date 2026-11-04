@@ -15,7 +15,7 @@ from .config import Cfg
 from .receiver import make_controller
 from .timing import PeriodicLoop
 
-COLUMNS = ("t_s", "ref_deg", "theta_deg", "speed_rpm", "err_deg", "u", "read_us")
+COLUMNS = ("t_s", "ref_deg", "theta_deg", "speed_rpm", "err_deg", "u", "read_us", "raw_deg")
 
 
 def parse_steps(text):
@@ -66,8 +66,11 @@ class Reference:
 
 
 def run(cfg, motor, steps, sample_hz=1000.0, control_hz=None, ramp_dps=0.0, settle_s=0.5,
-        max_error_deg=None, max_rpm=600.0, spin_us=0.0, log=print):
-    """Vykona profil na uz otvorenom motore. Vrati dict: data (stlpce), fault, stats."""
+        max_error_deg=None, max_rpm=600.0, spin_us=0.0, log=print, loop=None):
+    """Vykona profil na uz otvorenom motore. Vrati dict: data (stlpce), fault, stats.
+
+    loop = objekt s wait() -> ns a stats(); None = PeriodicLoop v realnom case (testy dodaju virtualny cas).
+    """
     rc = cfg.receiver
     if rc.mode not in ("voltage_pd", "torque_pd"):
         raise ValueError(f"receiver.mode {rc.mode} nie je polohovy PD regulator")
@@ -89,7 +92,7 @@ def run(cfg, motor, steps, sample_hz=1000.0, control_hz=None, ramp_dps=0.0, sett
 
     n_max = int((ref.total_s + 1.0) * float(sample_hz)) + 16
     cols = [array("d", bytes(8 * n_max)) for _ in COLUMNS]
-    t_c, ref_c, th_c, sp_c, err_c, u_c, rd_c = cols
+    t_c, ref_c, th_c, sp_c, err_c, u_c, rd_c, raw_c = cols
 
     unw = Unwrapper()
     fault = ""
@@ -98,7 +101,8 @@ def run(cfg, motor, steps, sample_hz=1000.0, control_hz=None, ramp_dps=0.0, sett
     t_first = None
 
     theta0 = unw.update(motor.read().theta_deg)
-    loop = PeriodicLoop(dt_s, float(spin_us) / 1e6)
+    if loop is None:
+        loop = PeriodicLoop(dt_s, float(spin_us) / 1e6)
     try:
         while not ref.done and n < n_max:
             now = loop.wait()
@@ -127,6 +131,7 @@ def run(cfg, motor, steps, sample_hz=1000.0, control_hz=None, ramp_dps=0.0, sett
             err_c[n] = err
             u_c[n] = out
             rd_c[n] = read_us
+            raw_c[n] = ms.theta_deg            # uhol z kniznice bez rozvinutia (pre tabulku coggingu)
             n += 1
     finally:
         motor.stop()

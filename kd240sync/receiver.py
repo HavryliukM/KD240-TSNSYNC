@@ -94,7 +94,10 @@ def make_controller(rc, sc=None):
             kp, kd, ki, limit, slew = r["kp"], r["kd"], r["ki"], r["torque_limit_a"], r["slew_a_s"]
             for w in warns:
                 print(f"[safety] {w}", flush=True)
-        return TorquePD(kp, kd, ki, limit, slew, v.i_limit_v, v.deadband_deg, kff=v.kff_v_per_dps)
+        # trenie nesmie zabrat viac nez polovicu rozsahu vystupu, inak by spatna vazba nemala rezervu
+        kfc = max(0.0, min(float(v.kfc_v), 0.5 * limit))
+        return TorquePD(kp, kd, ki, limit, slew, v.i_limit_v, v.deadband_deg, kff=v.kff_v_per_dps,
+                        kfc=kfc, fc_w0_dps=v.fc_w0_dps)
     if rc.mode == "speed_p":
         s = rc.speed_p
         return SpeedP(s.kp_rpm_per_deg, s.max_rpm)

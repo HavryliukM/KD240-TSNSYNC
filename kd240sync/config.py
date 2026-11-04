@@ -77,7 +77,10 @@ DEFAULTS = {
         "voltage_pd": {"kp_v_per_deg": 0.028, "kd_v_per_dps": 0.0010,
                        "ki_v_per_deg_s": 0.05, "kff_v_per_dps": 0.00037,
                        "i_limit_v": 0.3, "deadband_deg": 0.1,
-                       "voltage_limit_v": 1.0, "slew_v_s": 100.0},
+                       "voltage_limit_v": 1.0, "slew_v_s": 100.0,
+                       # kompenzacia sucheho trenia v smere ziadanej rychlosti [V], 0 = vypnute;
+                       # namerane 4. 11. 2026 pri 7.5 rpm asi 0.13 V. Plny ucinok od fc_w0_dps [deg/s].
+                       "kfc_v": 0.0, "fc_w0_dps": 10.0},
         "speed_p": {"kp_rpm_per_deg": 5.0, "max_rpm": 1500.0},
     },
 }

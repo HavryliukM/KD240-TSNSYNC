@@ -31,6 +31,7 @@ def main():
     p.add_argument("--max-rpm", type=float, default=600.0, help="nad touto rychlostou FAULT")
     p.add_argument("--max-error", type=float, default=None, help="limit chyby [deg] (predvolene najvacsi skok + 30)")
     p.add_argument("--spin-us", type=float, default=0.0, help="aktivne cakanie na termin vzorky [us]")
+    p.add_argument("--kfc", type=float, default=None, help="kompenzacia trenia [V] (prepise receiver.voltage_pd.kfc_v)")
     p.add_argument("--rt", action="store_true", help="SCHED_FIFO (vyzaduje root)")
     p.add_argument("--backend", choices=["foc_lib", "sim"], default="foc_lib")
     p.add_argument("--config", default=None)
@@ -41,6 +42,8 @@ def main():
     overrides = {"motor": {"backend": args.backend}, "receiver": {"mode": "voltage_pd"}}
     if args.lib_config:
         overrides["motor"]["foc_lib"] = {"config_path": os.path.abspath(args.lib_config)}
+    if args.kfc is not None:
+        overrides["receiver"]["voltage_pd"] = {"kfc_v": args.kfc}
     cfg = load(args.config, overrides=overrides)
     steps = position_test.parse_steps(args.steps)
 

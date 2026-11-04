@@ -8,14 +8,19 @@ def _clamp(x, lo, hi):
 class TorquePD:
     """Polohovy PD(I) regulator s vystupom = moment (prud v A).
 
-    u = kp*e + kd*(w_ref - w) + kff*w_ref + integral(ki*e), s limitom a obmedzenim rychlosti zmeny.
+    u = kp*e + kd*(w_ref - w) + kff*w_ref + kfc*clamp(w_ref/fc_w0, -1, 1) + integral(ki*e),
+    s limitom a obmedzenim rychlosti zmeny.
+
+    kfc je kompenzacia suchého trenia v smere ziadanej rychlosti (namerane 4. 11. 2026 asi 0.13 V).
+    Linearny prechod do fc_w0 [deg/s] zabrani preklapaniu +-kfc pri w_ref blizko nuly.
 
     Rovnaka trieda sluzi aj pre napatovy rezim (voltage_pd): jednotky vystupu su potom volty.
     """
 
     def __init__(self, kp, kd, ki=0.0, limit_a=0.3, slew_a_s=50.0, i_limit_a=0.05, deadband_deg=0.0,
-                 kff=0.0):
+                 kff=0.0, kfc=0.0, fc_w0_dps=10.0):
         self.kp, self.kd, self.ki, self.kff = kp, kd, ki, kff
+        self.kfc, self.fc_w0 = float(kfc), max(1e-6, float(fc_w0_dps))
         self.deadband = float(deadband_deg)
         self.limit, self.slew, self.i_limit = limit_a, slew_a_s, i_limit_a
         self.reset()
@@ -33,6 +38,8 @@ class TorquePD:
             if e_deg == 0.0 and abs(w_err_dps) < 1.0:
                 w_err_dps = 0.0
         u = self.kp * e_deg + self.kd * w_err_dps + self.kff * w_ref_dps
+        if self.kfc:
+            u += self.kfc * _clamp(w_ref_dps / self.fc_w0, -1.0, 1.0)
         if self.ki:
             # integrator pracuje s nezmensenou chybou: P-clen v mrtvej zone je prilis slaby
             # na prekonanie trenia, a prave integrator musi zvysnu odchylku dotiahnut na nulu
